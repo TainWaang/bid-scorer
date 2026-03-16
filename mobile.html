@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>投标评分计算器</title>
+  <style>
+    :root {
+      --blue: #1d4ed8;
+      --blue-light: #3b82f6;
+      --blue-dark: #1e3a8a;
+      --green: #16a34a;
+      --red: #dc2626;
+      --orange: #d97706;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text2: #64748b;
+      --text3: #94a3b8;
+      --nav-h: 60px;
+      --header-h: 52px;
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      overscroll-behavior: none;
+    }
+
+    /* ── Header ── */
+    .header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: var(--header-h);
+      background: linear-gradient(135deg, var(--blue-dark), var(--blue));
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    }
+    .header-title { color: #fff; font-size: 17px; font-weight: 600; }
+    .header-sub { color: rgba(255,255,255,0.7); font-size: 11px; margin-top: 1px; }
+    .header-btn {
+      background: rgba(255,255,255,0.2);
+      border: none; color: #fff; border-radius: 20px;
+      padding: 6px 14px; font-size: 13px; font-family: inherit;
+      cursor: pointer;
+    }
+
+    /* ── Bottom Nav ── */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+      height: var(--nav-h);
+      background: #fff;
+      border-top: 1px solid var(--border);
+      display: flex;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 2px;
+      border: none; background: none; cursor: pointer;
+      color: var(--text3); font-size: 10px; font-family: inherit;
+      padding-bottom: 4px;
+      transition: color 0.2s;
+    }
+    .nav-item.active { color: var(--blue); }
+    .nav-icon { font-size: 20px; line-height: 1; }
+    .nav-badge {
+      position: absolute;
+      top: 4px; right: calc(50% - 14px);
+      background: var(--red); color: #fff;
+      font-size: 9px; border-radius: 8px;
+      padding: 1px 4px; min-width: 14px; text-align: center;
+    }
+    .nav-item { position: relative; }
+
+    /* ── Scroll Container ── */
+    .scroll-wrap {
+      position: fixed;
+      top: var(--header-h); bottom: var(--nav-h);
+      left: 0; right: 0;
+      overflow: hidden;
+    }
+    .pages {
+      display: flex;
+      width: 500%; height: 100%;
+      transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+    }
+    .page {
+      width: 20%; height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px 12px 16px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .card-head {
+      font-size: 14px; font-weight: 700; color: var(--blue-dark);
+      margin-bottom: 12px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .card-head::before {
+      content: ''; display: block;
+      width: 3px; height: 14px;
+      background: var(--blue); border-radius: 2px; flex-shrink: 0;
+    }
+
+    /* ── Form ── */
+    .field { margin-bottom: 14px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: block; font-size: 12px; color: var(--text2);
+      margin-bottom: 5px; font-weight: 500;
+    }
+    .field input, .field select {
+      width: 100%; padding: 11px 13px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px; font-size: 15px;
+      font-family: inherit; color: var(--text);
+      background: #f8fafc;
+      transition: border-color 0.2s, background 0.2s;
+      -webkit-appearance: none;
+    }
+    .field input:focus, .field select:focus {
+      outline: none; border-color: var(--blue);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(29,78,216,0.08);
+    }
+    .field input.highlight {
+      border-color: var(--blue); background: #eff6ff;
+    }
+    .field-row { display: flex; gap: 10px; }
+    .field-row .field { flex: 1; margin-bottom: 0; }
+
+    /* ── Weight bar ── */
+    .weight-bar {
+      height: 8px; border-radius: 4px; background: var(--border);
+      margin: 6px 0 2px; overflow: hidden;
+    }
+    .weight-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .weight-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); }
+
+    /* ── Btn ── */
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; padding: 14px;
+      border: none; border-radius: 12px;
+      font-size: 16px; font-family: inherit; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; letter-spacing: 0.5px;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-blue { background: var(--blue); color: #fff; }
+    .btn-green { background: var(--green); color: #fff; }
+    .btn-outline { background: #fff; color: var(--blue); border: 1.5px solid var(--blue); }
+    .btn-sm {
+      width: auto; padding: 8px 16px; font-size: 13px;
+      border-radius: 8px; font-weight: 500;
+    }
+    .btn-danger-sm {
+      background: #fee2e2; color: var(--red);
+      border: none; border-radius: 8px;
+      padding: 7px 13px; font-size: 13px;
+      font-family: inherit; cursor: pointer;
+    }
+
+    /* ── Bidder Card ── */
+    .bidder-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 10px;
+      border: 1.5px solid var(--border);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+    .bidder-card.me { border-color: var(--blue); background: #eff6ff; }
+    .bidder-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .bidder-name-wrap { display: flex; align-items: center; gap: 8px; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-me { background: #fef9c3; color: #854d0e; }
+    .badge-comp { background: #e0f2fe; color: #075985; }
+    .bidder-name-input {
+      background: transparent; border: none; font-size: 15px;
+      font-weight: 600; color: var(--text); font-family: inherit;
+      width: 100px; padding: 0;
+    }
+    .bidder-name-input:focus { outline: none; border-bottom: 1.5px solid var(--blue); }
+    .scores-row { display: flex; gap: 8px; }
+    .score-field { flex: 1; }
+    .score-field label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+    .score-field input {
+      width: 100%; padding: 8px 10px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 14px; font-family: inherit; background: #fff;
+      text-align: center;
+    }
+    .score-field input:focus { outline: none; border-color: var(--blue); }
+
+    /* ── Result ── */
+    .rank-card {
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-bottom: 10px;
+      position: relative; overflow: hidden;
+    }
+    .rank-card.first { background: linear-gradient(135deg, #15803d, #16a34a); color: #fff; }
+    .rank-card.second { background: linear-gradient(135deg, #1e40af, #2563eb); color: #fff; }
+    .rank-card.other { background: var(--card); color: var(--text); border: 1.5px solid var(--border); }
+    .rank-num {
+      position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+      font-size: 56px; font-weight: 900; opacity: 0.12; line-height: 1;
+    }
+    .rank-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .rank-total { font-size: 28px; font-weight: 900; margin-bottom: 8px; }
+    .rank-meta { display: flex; gap: 12px; flex-wrap: wrap; }
+    .rank-meta-item { font-size: 12px; opacity: 0.85; }
+    .rank-meta-item span { font-weight: 700; font-size: 13px; }
+
+    .my-summary {
+      background: linear-gradient(135deg, var(--blue-dark), var(--blue));
+      border-radius: var(--radius); padding: 18px; color: #fff;
+      margin-bottom: 12px;
+    }
+    .my-summary-title { font-size: 13px; opacity: 0.8; margin-bottom: 6px; }
+    .my-summary-rank { font-size: 42px; font-weight: 900; line-height: 1; }
+    .my-summary-sub { font-size: 13px; opacity: 0.7; margin-top: 4px; }
+    .my-summary-scores {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px; margin-top: 14px;
+    }
+    .my-score-item { background: rgba(255,255,255,0.15); border-radius: 8px; padding: 10px; text-align: center; }
+    .my-score-item .si-label { font-size: 11px; opacity: 0.75; margin-bottom: 3px; }
+    .my-score-item .si-val { font-size: 18px; font-weight: 800; }
+
+    /* ── Optimize ── */
+    .opt-result {
+      background: linear-gradient(135deg, #1e3a5f, #2563eb);
+      border-radius: var(--radius); padding: 18px; color: #fff;
+      margin-bottom: 12px;
+    }
+    .opt-result-title { font-size: 13px; opacity: 0.8; margin-bottom: 8px; }
+    .opt-price { font-size: 32px; font-weight: 900; margin-bottom: 4px; }
+    .opt-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+    .opt-meta-item .oml { font-size: 11px; opacity: 0.75; }
+    .opt-meta-item .omv { font-size: 16px; font-weight: 700; }
+
+    /* ── Sensitivity ── */
+    .sens-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 0; border-bottom: 1px solid var(--border);
+    }
+    .sens-row:last-child { border-bottom: none; }
+    .sens-price { font-size: 13px; color: var(--text2); width: 90px; flex-shrink: 0; }
+    .sens-bar-wrap { flex: 1; }
+    .sens-bar {
+      height: 10px; border-radius: 5px;
+      background: var(--blue); transition: width 0.3s;
+    }
+    .sens-bar.rank1 { background: var(--green); }
+    .sens-bar.rank2 { background: var(--blue-light); }
+    .sens-bar.rank3 { background: var(--orange); }
+    .sens-bar.rankX { background: var(--red); }
+    .sens-score { font-size: 13px; font-weight: 600; width: 58px; text-align: right; flex-shrink: 0; }
+    .sens-rank { font-size: 12px; width: 36px; text-align: right; flex-shrink: 0; color: var(--text2); }
+
+    /* ── Scenario ── */
+    .scenario-card {
+      background: var(--card); border-radius: var(--radius);
+      border: 1.5px solid var(--border);
+      padding: 14px; margin-bottom: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+    .scenario-card.s-first { border-color: var(--green); }
+    .sc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .sc-name { font-size: 15px; font-weight: 700; }
+    .sc-rank { font-size: 22px; font-weight: 900; color: var(--blue); }
+    .sc-rank.first { color: var(--green); }
+    .sc-details { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .sc-detail-item { text-align: center; }
+    .sc-detail-item .dl { font-size: 11px; color: var(--text3); }
+    .sc-detail-item .dv { font-size: 14px; font-weight: 600; color: var(--text); }
+
+    /* ── Preset chips ── */
+    .preset-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .preset-chip {
+      background: #eff6ff; color: var(--blue);
+      border: 1.5px solid #bfdbfe;
+      border-radius: 20px; padding: 7px 14px;
+      font-size: 13px; font-family: inherit;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .preset-chip:active { background: var(--blue); color: #fff; }
+
+    /* ── Strategy tip ── */
+    .strat-tip {
+      background: #eff6ff; border: 1px solid #bfdbfe;
+      border-radius: 10px; padding: 12px;
+      font-size: 13px; color: #1e40af; line-height: 1.7;
+      margin-top: 8px;
+    }
+
+    /* ── Misc ── */
+    .note { font-size: 12px; color: var(--text3); line-height: 1.6; margin-top: 6px; }
+    .divider { height: 1px; background: var(--border); margin: 14px 0; }
+    .tag-sum { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+    .tag-ok { background: #dcfce7; color: #166534; }
+    .tag-err { background: #fee2e2; color: #991b1b; }
+    .benchmark-tip {
+      background: #fef9c3; border: 1px solid #fde68a;
+      border-radius: 8px; padding: 10px 12px;
+      font-size: 13px; color: #92400e; margin-top: 8px;
+    }
+    .empty-tip {
+      text-align: center; padding: 40px 20px;
+      color: var(--text3); font-size: 14px;
+    }
+    .empty-icon { font-size: 36px; margin-bottom: 8px; }
+
+    /* Safe area */
+    @supports (padding-bottom: env(safe-area-inset-bottom)) {
+      .bottom-nav { padding-bottom: env(safe-area-inset-bottom); height: calc(var(--nav-h) + env(safe-area-inset-bottom)); }
+      .scroll-wrap { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="header-title">投标评分计算器</div>
+    <div class="header-sub">综合评分策略优化</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="index.html" style="color:rgba(255,255,255,0.75);font-size:12px;text-decoration:none;">桌面版</a>
+    <button class="header-btn" onclick="quickCalc()">立即计算</button>
+  </div>
+</div>
+
+<!-- Pages -->
+<div class="scroll-wrap">
+  <div class="pages" id="pages">
+
+    <!-- ── Page 1: 规则配置 ── -->
+    <div class="page" id="page-0">
+
+      <div class="card">
+        <div class="card-head">权重设置</div>
+        <div class="field-row">
+          <div class="field">
+            <label>商务评分 %</label>
+            <input type="number" id="m-bw" value="20" min="0" max="100" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label>价格评分 %</label>
+            <input type="number" id="m-pw" value="40" min="0" max="100" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label>技术评分 %</label>
+            <input type="number" id="m-tw" value="40" min="0" max="100" inputmode="numeric">
+          </div>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-fill" id="weight-fill" style="width:100%;background:linear-gradient(90deg,#1d4ed8 20%,#16a34a 20% 60%,#d97706 60%);"></div>
+        </div>
+        <div class="weight-labels">
+          <span id="wl-bw">商务 20%</span>
+          <span id="wl-pw">价格 40%</span>
+          <span id="wl-tw">技术 40%</span>
+        </div>
+        <div style="margin-top:8px;">
+          <span class="tag-sum tag-ok" id="weight-tag">合计 100%</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">价格评分策略</div>
+        <div class="field">
+          <label>评分方法</label>
+          <select id="m-strategy">
+            <option value="lowestPrice">最低价法</option>
+            <option value="averagePrice" selected>平均价法</option>
+            <option value="compositePrice">复合基准价法</option>
+            <option value="fixedBenchmark">固定基准价法（标底）</option>
+            <option value="trimmedAverage">去高去低平均价法</option>
+            <option value="intervalScore">区间得分法</option>
+          </select>
+        </div>
+        <div id="m-strat-params"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">快速预设</div>
+        <div class="preset-chips">
+          <button class="preset-chip" onclick="loadPreset('gov')">政府采购</button>
+          <button class="preset-chip" onclick="loadPreset('infra')">基础设施</button>
+          <button class="preset-chip" onclick="loadPreset('tech')">信息化项目</button>
+          <button class="preset-chip" onclick="loadPreset('lowest')">最低价竞标</button>
+        </div>
+      </div>
+
+      <button class="btn btn-blue" onclick="quickCalc()">
+        <span>计算评分</span><span>→</span>
+      </button>
+
+    </div>
+
+    <!-- ── Page 2: 投标方 ── -->
+    <div class="page" id="page-1">
+
+      <div id="bidder-list"></div>
+
+      <button class="btn btn-outline" onclick="addBidder()" style="margin-bottom:12px;">
+        <span>+</span><span>添加竞争方</span>
+      </button>
+
+      <button class="btn btn-blue" onclick="quickCalc()">
+        <span>计算评分</span><span>→</span>
+      </button>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="card-head">填写说明</div>
+        <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:16px;">
+          <li>商务分/技术分：预估评委打分或参考历史</li>
+          <li>竞争方报价：据市场调研或情报填写</li>
+          <li>我方报价可留空，在"优化"页面自动求解</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- ── Page 3: 结果 ── -->
+    <div class="page" id="page-2">
+      <div id="result-content">
+        <div class="empty-tip">
+          <div class="empty-icon">📊</div>
+          <div>请先填写信息后点击"计算评分"</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Page 4: 优化 ── -->
+    <div class="page" id="page-3">
+
+      <div class="card">
+        <div class="card-head">搜索区间</div>
+        <div class="field-row">
+          <div class="field">
+            <label>最低价（元）</label>
+            <input type="number" id="m-opt-min" inputmode="numeric" placeholder="如 800000">
+          </div>
+          <div class="field">
+            <label>最高价（元）</label>
+            <input type="number" id="m-opt-max" inputmode="numeric" placeholder="如 1200000">
+          </div>
+        </div>
+        <div class="field">
+          <label>搜索步长（元）</label>
+          <input type="number" id="m-opt-step" inputmode="numeric" placeholder="如 1000">
+        </div>
+        <button class="btn btn-green" onclick="runOptimize()" style="margin-top:4px;">
+          <span>搜索最优报价</span>
+        </button>
+        <p class="note" style="margin-top:8px;">找出使我方综合排名第一的最高报价（利润最大化）</p>
+      </div>
+
+      <div id="opt-result-box"></div>
+
+      <div class="card" id="sens-card" style="display:none;">
+        <div class="card-head">价格敏感性分析</div>
+        <div id="sens-list"></div>
+      </div>
+
+    </div>
+
+    <!-- ── Page 5: 方案对比 ── -->
+    <div class="page" id="page-4">
+
+      <div class="card">
+        <div class="card-head">保存方案</div>
+        <div class="field">
+          <label>方案名称</label>
+          <input type="text" id="m-scenario-name" placeholder="如：稳健方案 / 激进报价">
+        </div>
+        <button class="btn btn-green" onclick="saveScenario()">
+          <span>保存当前方案</span>
+        </button>
+        <p class="note" style="margin-top:6px;">基于当前填写的我方报价和配置保存</p>
+      </div>
+
+      <div id="scenario-list">
+        <div class="empty-tip">
+          <div class="empty-icon">📋</div>
+          <div>暂无方案</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">策略提示</div>
+        <div style="font-size:13px;color:var(--text2);line-height:2;">
+          <div><b>平均价法：</b>报价略低于预测均价，避免过低被认定为异常</div>
+          <div><b>最低价法：</b>价格优先，需兼顾利润底线</div>
+          <div><b>复合基准价：</b>最优点在均价与最低价之间</div>
+          <div><b>配合单位策略：</b>通过配合方报价影响基准价走向，为我方创造有利区间</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<div class="bottom-nav">
+  <button class="nav-item active" onclick="switchPage(0,this)">
+    <span class="nav-icon">⚙️</span>
+    <span>规则</span>
+  </button>
+  <button class="nav-item" onclick="switchPage(1,this)">
+    <span class="nav-icon">👥</span>
+    <span>投标方</span>
+    <span class="nav-badge" id="bidder-badge">3</span>
+  </button>
+  <button class="nav-item" onclick="switchPage(2,this)">
+    <span class="nav-icon">📊</span>
+    <span>结果</span>
+  </button>
+  <button class="nav-item" onclick="switchPage(3,this)">
+    <span class="nav-icon">🎯</span>
+    <span>优化</span>
+  </button>
+  <button class="nav-item" onclick="switchPage(4,this)">
+    <span class="nav-icon">📋</span>
+    <span>方案</span>
+    <span class="nav-badge" id="scenario-badge" style="display:none;">0</span>
+  </button>
+</div>
+
+<script src="js/scoring.js"></script>
+<script>
+// ── State ──
+const S = {
+  page: 0,
+  config: {
+    businessWeight: 20, priceWeight: 40, techWeight: 40,
+    priceFull: 100,
+    priceStrategy: 'averagePrice',
+    strategyParams: { deductHigh:0.5, deductLow:0.3, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1 },
+  },
+  bidders: [
+    { id:'my', name:'我方',    price:0, businessScore:80, techScore:85, isMe:true  },
+    { id:'b1', name:'竞争方A', price:0, businessScore:78, techScore:82, isMe:false },
+    { id:'b2', name:'竞争方B', price:0, businessScore:76, techScore:80, isMe:false },
+  ],
+  scenarios: [],
+};
+
+// ── Nav ──
+function switchPage(idx, btn) {
+  S.page = idx;
+  document.getElementById('pages').style.transform = `translateX(-${idx*20}%)`;
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (idx === 2) renderResult();
+  if (idx === 3) initOptimizeDefaults();
+}
+
+// ── Weight ──
+function initWeightBindings() {
+  ['m-bw','m-pw','m-tw'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateWeights);
+  });
+  updateWeights();
+}
+
+function updateWeights() {
+  const bw = +gi('m-bw').value||0;
+  const pw = +gi('m-pw').value||0;
+  const tw = +gi('m-tw').value||0;
+  S.config.businessWeight = bw;
+  S.config.priceWeight    = pw;
+  S.config.techWeight     = tw;
+  const sum = bw+pw+tw;
+  gi('wl-bw').textContent = `商务 ${bw}%`;
+  gi('wl-pw').textContent = `价格 ${pw}%`;
+  gi('wl-tw').textContent = `技术 ${tw}%`;
+  const tag = gi('weight-tag');
+  if (sum===100) { tag.textContent='合计 100% ✓'; tag.className='tag-sum tag-ok'; }
+  else { tag.textContent=`合计 ${sum}%（应为100）`; tag.className='tag-sum tag-err'; }
+  // bar
+  gi('weight-fill').style.background = `linear-gradient(90deg,#1d4ed8 ${bw}%,#16a34a ${bw}% ${bw+pw}%,#d97706 ${bw+pw}%)`;
+}
+
+// ── Strategy Params ──
+function initStrategyBinding() {
+  gi('m-strategy').addEventListener('change', () => {
+    S.config.priceStrategy = gi('m-strategy').value;
+    renderStrategyParams();
+  });
+  renderStrategyParams();
+}
+
+function renderStrategyParams() {
+  const s = S.config.priceStrategy;
+  const p = S.config.strategyParams;
+  const container = gi('m-strat-params');
+
+  const tips = {
+    lowestPrice:    '最低报价得满分，其他按比例扣分，无需额外参数。',
+    averagePrice:   '基准价 = 所有报价算术平均值，偏差越大扣分越多。',
+    compositePrice: '基准价 = 最低价×权重A + 平均价×权重B（之和=1）。',
+    fixedBenchmark: '基准价由招标方预先设定（标底价），报价越接近越高分。',
+    trimmedAverage: '去掉最高价和最低价各若干个后再取平均作为基准价。',
+    intervalScore:  '报价在基准价附近区间内得满分，超出区间则按比例扣分。',
+  };
+
+  const fieldDeduct = `
+    <div class="field-row" style="margin-top:10px;">
+      <div class="field"><label>高于基准价每1%扣（分）</label>
+        <input type="number" data-key="deductHigh" value="${p.deductHigh}" step="0.1" inputmode="decimal">
+      </div>
+      <div class="field"><label>低于基准价每1%扣（分）</label>
+        <input type="number" data-key="deductLow" value="${p.deductLow}" step="0.1" inputmode="decimal">
+      </div>
+    </div>`;
+
+  const extras = {
+    lowestPrice: '',
+    averagePrice: fieldDeduct,
+    compositePrice: `<div class="field-row" style="margin-top:10px;">
+      <div class="field"><label>最低价权重</label><input type="number" data-key="weightLow" value="${p.weightLow}" step="0.05" min="0" max="1" inputmode="decimal"></div>
+      <div class="field"><label>平均价权重</label><input type="number" data-key="weightAvg" value="${p.weightAvg}" step="0.05" min="0" max="1" inputmode="decimal"></div>
+    </div>${fieldDeduct}`,
+    fixedBenchmark: `<div class="field" style="margin-top:10px;">
+      <label>标底基准价（元）</label>
+      <input type="number" data-key="benchmark" value="${p.benchmark}" step="10000" inputmode="numeric">
+    </div>${fieldDeduct}`,
+    trimmedAverage: `<div class="field" style="margin-top:10px;">
+      <label>去掉最高/最低各几个</label>
+      <input type="number" data-key="trimCount" value="${p.trimCount}" step="1" min="1" max="3" inputmode="numeric">
+    </div>${fieldDeduct}`,
+    intervalScore: `<div class="field" style="margin-top:10px;">
+      <label>基准价（元）</label>
+      <input type="number" data-key="benchmark" value="${p.benchmark}" step="10000" inputmode="numeric">
+    </div>
+    <div class="field-row">
+      <div class="field"><label>下浮上限 %</label><input type="number" data-key="lowerPct" value="${p.lowerPct}" step="0.5" inputmode="decimal"></div>
+      <div class="field"><label>上浮上限 %</label><input type="number" data-key="upperPct" value="${p.upperPct}" step="0.5" inputmode="decimal"></div>
+    </div>
+    <div class="field"><label>超出区间每1%扣（分）</label>
+      <input type="number" data-key="deductOut" value="${p.deductOut}" step="0.5" inputmode="decimal">
+    </div>`,
+  };
+
+  container.innerHTML = `<div class="strat-tip">${tips[s]||''}</div>${extras[s]||''}`;
+
+  container.querySelectorAll('input[data-key]').forEach(el => {
+    el.addEventListener('input', () => {
+      S.config.strategyParams[el.dataset.key] = +el.value;
+    });
+  });
+}
+
+// ── Bidder List ──
+function renderBidders() {
+  const list = gi('bidder-list');
+  list.innerHTML = '';
+  S.bidders.forEach((b, idx) => {
+    const div = document.createElement('div');
+    div.className = 'bidder-card' + (b.isMe ? ' me' : '');
+    div.innerHTML = `
+      <div class="bidder-head">
+        <div class="bidder-name-wrap">
+          <span class="badge ${b.isMe?'badge-me':'badge-comp'}">${b.isMe?'我方':'竞争方'}</span>
+          <input class="bidder-name-input" type="text" value="${b.name}"
+            onchange="S.bidders[${idx}].name=this.value">
+        </div>
+        ${b.isMe ? '' : `<button class="btn-danger-sm" onclick="removeBidder(${idx})">删除</button>`}
+      </div>
+      <div class="field">
+        <label>报价（元）${b.isMe?'<span style="color:#1d4ed8;font-weight:600;"> 我方</span>':''}</label>
+        <input type="number" value="${b.price||''}" placeholder="${b.isMe?'填写我方报价':'填写竞争方预估报价'}"
+          class="${b.isMe?'highlight':''}" inputmode="numeric" step="1000"
+          oninput="S.bidders[${idx}].price=+this.value"
+          onchange="S.bidders[${idx}].price=+this.value">
+      </div>
+      <div class="scores-row">
+        <div class="score-field">
+          <label>商务分</label>
+          <input type="number" value="${b.businessScore}" min="0" max="100" step="0.5" inputmode="decimal"
+            oninput="S.bidders[${idx}].businessScore=+this.value">
+        </div>
+        <div class="score-field">
+          <label>技术分</label>
+          <input type="number" value="${b.techScore}" min="0" max="100" step="0.5" inputmode="decimal"
+            oninput="S.bidders[${idx}].techScore=+this.value">
+        </div>
+      </div>`;
+    list.appendChild(div);
+  });
+  gi('bidder-badge').textContent = S.bidders.length;
+}
+
+function addBidder() {
+  const n = S.bidders.filter(b=>!b.isMe).length + 1;
+  S.bidders.push({ id:'b'+Date.now(), name:'竞争方'+('ABCDEFGH'[n-1]||n), price:0, businessScore:75, techScore:78, isMe:false });
+  renderBidders();
+}
+
+function removeBidder(idx) {
+  if (S.bidders[idx].isMe) return;
+  S.bidders.splice(idx,1);
+  renderBidders();
+}
+
+// ── Result ──
+function renderResult() {
+  const config = buildConfig();
+  const bidders = S.bidders.map(b=>({...b}));
+  const result  = Scoring.evaluate(bidders, config);
+  const me = result.find(b=>b.isMe);
+  const content = gi('result-content');
+
+  let html = '';
+
+  // My summary
+  if (me) {
+    const rankLabel = me.rank===1?'第一名 🏆':me.rank===2?'第二名':'第'+me.rank+'名';
+    html += `<div class="my-summary">
+      <div class="my-summary-title">我方综合评分结果</div>
+      <div class="my-summary-rank">${rankLabel}</div>
+      <div class="my-summary-sub">综合得分 ${me.total.toFixed(4)} 分 · 共${result.length}家投标</div>
+      <div class="my-summary-scores">
+        <div class="my-score-item"><div class="si-label">商务得分</div><div class="si-val">${me.businessScore}</div></div>
+        <div class="my-score-item"><div class="si-label">价格得分</div><div class="si-val">${me.priceScore}</div></div>
+        <div class="my-score-item"><div class="si-label">技术得分</div><div class="si-val">${me.techScore}</div></div>
+      </div>
+    </div>`;
+    if (me.benchmark) {
+      html += `<div class="benchmark-tip">
+        评标基准价：¥ ${fmt(me.benchmark)}&emsp;我方偏差：${me.deviation??'-'}%
+      </div>`;
+    }
+  }
+
+  // All bidders
+  result.forEach(b => {
+    const cls = b.rank===1?'first':b.rank===2?'second':'other';
+    html += `<div class="rank-card ${cls}">
+      <div class="rank-num">${b.rank}</div>
+      <div class="rank-name">${b.name}${b.isMe?'（我方）':''}</div>
+      <div class="rank-total">${b.total.toFixed(4)}</div>
+      <div class="rank-meta">
+        <div class="rank-meta-item">报价 <span>¥${fmt(b.price)}</span></div>
+        <div class="rank-meta-item">商务 <span>${b.businessScore}</span></div>
+        <div class="rank-meta-item">价格 <span>${b.priceScore}</span></div>
+        <div class="rank-meta-item">技术 <span>${b.techScore}</span></div>
+        ${b.deviation!=null?`<div class="rank-meta-item">偏差 <span>${b.deviation}%</span></div>`:''}
+      </div>
+    </div>`;
+  });
+
+  html += `<div class="note" style="text-align:center;margin-top:4px;">
+    权重：商务${config.businessWeight}% · 价格${config.priceWeight}% · 技术${config.techWeight}%<br>
+    策略：${Scoring.strategyNames[config.priceStrategy]}
+  </div>`;
+
+  content.innerHTML = html;
+}
+
+// ── Optimize ──
+function initOptimizeDefaults() {
+  if (gi('m-opt-min').value && gi('m-opt-max').value) return;
+  const others = S.bidders.filter(b=>!b.isMe && b.price>0);
+  if (others.length > 0) {
+    const prices = others.map(b=>b.price);
+    gi('m-opt-min').value = Math.round(Math.min(...prices)*0.85);
+    gi('m-opt-max').value = Math.round(Math.max(...prices)*1.1);
+    gi('m-opt-step').value = Math.round((gi('m-opt-max').value - gi('m-opt-min').value)/400);
+  }
+}
+
+function runOptimize() {
+  const config = buildConfig();
+  const minP = +gi('m-opt-min').value||0;
+  const maxP = +gi('m-opt-max').value||0;
+  const step = Math.max(+gi('m-opt-step').value||1000, 100);
+  if (minP<=0||maxP<=0||maxP<=minP) { alert('请填写有效的搜索区间'); return; }
+
+  const myBidder = S.bidders.find(b=>b.isMe);
+  const others   = S.bidders.filter(b=>!b.isMe).map(b=>({...b}));
+
+  const opt = Scoring.findOptimalPrice(myBidder.id, others, config, {minPrice:minP,maxPrice:maxP,step});
+
+  const box = gi('opt-result-box');
+  box.innerHTML = `<div class="opt-result">
+    <div class="opt-result-title">最优报价推荐 —— 使排名第一的最高报价</div>
+    <div class="opt-price">¥ ${fmt(opt.bestPrice)}</div>
+    <div class="opt-meta">
+      <div class="opt-meta-item"><div class="oml">预计综合得分</div><div class="omv">${opt.bestScore?.toFixed(4)??'-'}</div></div>
+      <div class="opt-meta-item"><div class="oml">预计排名</div><div class="omv">第 ${opt.bestRank} 名</div></div>
+      <div class="opt-meta-item"><div class="oml">${opt.bestRank===1?'✅ 策略':'⚠️ 提示'}</div>
+        <div class="omv" style="font-size:13px;">${opt.bestRank===1?'此价位利润最大':'无法排第一，需调整策略'}</div></div>
+    </div>
+  </div>`;
+
+  // Sensitivity
+  const sens = Scoring.sensitivityAnalysis(myBidder.id, others, config, {minPrice:minP,maxPrice:maxP}, 20);
+  const maxTotal = Math.max(...sens.map(r=>r.total));
+  const sensHtml = sens.map(r => {
+    const pct = Math.round(r.total/maxTotal*100);
+    const cls = r.rank===1?'rank1':r.rank===2?'rank2':r.rank===3?'rank3':'rankX';
+    return `<div class="sens-row">
+      <div class="sens-price">¥${fmtShort(r.price)}</div>
+      <div class="sens-bar-wrap"><div class="sens-bar ${cls}" style="width:${pct}%"></div></div>
+      <div class="sens-score">${r.total.toFixed(2)}</div>
+      <div class="sens-rank">第${r.rank}名</div>
+    </div>`;
+  }).join('');
+
+  gi('sens-card').style.display = 'block';
+  gi('sens-list').innerHTML = sensHtml;
+}
+
+// ── Scenario ──
+function saveScenario() {
+  const config = buildConfig();
+  const myBidder = S.bidders.find(b=>b.isMe);
+  if (!myBidder||!myBidder.price) { alert('请先填写我方报价'); return; }
+  const result = Scoring.evaluate(S.bidders.map(b=>({...b})), config);
+  const me = result.find(b=>b.isMe);
+  const name = gi('m-scenario-name').value || `方案${S.scenarios.length+1}`;
+  S.scenarios.push({
+    name,
+    price: myBidder.price,
+    strategy: Scoring.strategyNames[config.priceStrategy],
+    businessScore: myBidder.businessScore,
+    priceScore: me?.priceScore??0,
+    techScore: myBidder.techScore,
+    total: me?.total??0,
+    rank: me?.rank??'-',
+  });
+  gi('m-scenario-name').value = '';
+  renderScenarios();
+}
+
+function renderScenarios() {
+  const list = gi('scenario-list');
+  const badge = gi('scenario-badge');
+  if (S.scenarios.length === 0) {
+    list.innerHTML = '<div class="empty-tip"><div class="empty-icon">📋</div><div>暂无方案</div></div>';
+    badge.style.display = 'none'; return;
+  }
+  badge.style.display = 'block';
+  badge.textContent = S.scenarios.length;
+  const maxT = Math.max(...S.scenarios.map(s=>s.total));
+  list.innerHTML = S.scenarios.map((s,i) => `
+    <div class="scenario-card ${s.rank===1?'s-first':''}">
+      <div class="sc-head">
+        <div>
+          <div class="sc-name">${s.name}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.strategy}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="sc-rank ${s.rank===1?'first':(s.rank===2?'':'')}" style="${s.rank===1?'color:var(--green)':s.rank===2?'color:var(--blue)':'color:var(--text2)'}">
+            第${s.rank}名
+          </div>
+          <div style="font-size:22px;font-weight:900;color:var(--text);">${s.total.toFixed(2)}</div>
+        </div>
+      </div>
+      <div class="sc-details">
+        <div class="sc-detail-item"><div class="dl">报价</div><div class="dv" style="font-size:12px;">¥${fmtShort(s.price)}</div></div>
+        <div class="sc-detail-item"><div class="dl">商务/价格/技术</div><div class="dv" style="font-size:12px;">${s.businessScore}/${s.priceScore}/${s.techScore}</div></div>
+        <div class="sc-detail-item">
+          <button class="btn-danger-sm" onclick="removeScenario(${i})">删除</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function removeScenario(idx) {
+  S.scenarios.splice(idx,1);
+  renderScenarios();
+}
+
+// ── Presets ──
+function loadPreset(name) {
+  const presets = {
+    gov:    { businessWeight:20, priceWeight:40, techWeight:40, priceStrategy:'averagePrice',    label:'政府采购' },
+    infra:  { businessWeight:10, priceWeight:60, techWeight:30, priceStrategy:'compositePrice',  label:'基础设施' },
+    tech:   { businessWeight:15, priceWeight:30, techWeight:55, priceStrategy:'lowestPrice',     label:'信息化项目' },
+    lowest: { businessWeight:20, priceWeight:50, techWeight:30, priceStrategy:'lowestPrice',     label:'最低价竞标' },
+  };
+  const p = presets[name]; if (!p) return;
+  S.config.businessWeight = p.businessWeight;
+  S.config.priceWeight    = p.priceWeight;
+  S.config.techWeight     = p.techWeight;
+  S.config.priceStrategy  = p.priceStrategy;
+  gi('m-bw').value = p.businessWeight;
+  gi('m-pw').value = p.priceWeight;
+  gi('m-tw').value = p.techWeight;
+  gi('m-strategy').value = p.priceStrategy;
+  updateWeights();
+  renderStrategyParams();
+}
+
+// ── Quick Calc ──
+function quickCalc() {
+  renderResult();
+  const navItems = document.querySelectorAll('.nav-item');
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  navItems[2].classList.add('active');
+  S.page = 2;
+  document.getElementById('pages').style.transform = `translateX(-40%)`;
+}
+
+// ── Helpers ──
+function buildConfig() {
+  return { ...S.config, strategyParams: { ...S.config.strategyParams }, myBidderId: 'my' };
+}
+function gi(id) { return document.getElementById(id); }
+function fmt(n) { if(!n&&n!==0) return '-'; return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:0}); }
+function fmtShort(n) {
+  if (!n&&n!==0) return '-';
+  if (n>=10000) return (n/10000).toFixed(1)+'万';
+  return n.toString();
+}
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  initWeightBindings();
+  initStrategyBinding();
+  renderBidders();
+  renderScenarios();
+});
+</script>
+</body>
+</html>
