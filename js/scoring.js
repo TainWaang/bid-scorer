@@ -29,21 +29,19 @@ const Scoring = (() => {
     /**
      * 2. 平均价法
      * 评标基准价 = 所有有效报价的算术平均值
-     * 高于基准价每1%扣X分，低于基准价每1%扣Y分
+     * 平均价为80分；每低于平均价1%加1分，最高100分；
+     * 每高于平均价1%减1分，最低0分
      */
     averagePrice(bids, fullScore, params = {}) {
-      const deductHigh = params.deductHigh ?? 0.5;   // 高于基准价每1%扣分
-      const deductLow  = params.deductLow  ?? 0.3;   // 低于基准价每1%扣分
       const validBids = bids.filter(b => b.price > 0);
       if (validBids.length === 0) return bids.map(b => ({ ...b, priceScore: 0, benchmark: 0 }));
       const avg = validBids.reduce((s, b) => s + b.price, 0) / validBids.length;
       return bids.map(b => {
         if (b.price <= 0) return { ...b, priceScore: 0, benchmark: avg };
         const deviation = (b.price - avg) / avg * 100; // 偏差率%
-        let deduct = deviation > 0
-          ? deviation * deductHigh
-          : Math.abs(deviation) * deductLow;
-        const score = Math.max(0, fullScore - deduct);
+        const score = deviation > 0
+          ? Math.max(0, 80 - deviation)
+          : Math.min(100, 80 + Math.abs(deviation));
         return { ...b, priceScore: round(score, 2), benchmark: avg, deviation: round(deviation, 2) };
       });
     },

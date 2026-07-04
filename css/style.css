@@ -247,6 +247,10 @@ tr.my-row td {
   font-weight: bold;
 }
 
+tr.partner-row td {
+  background: #f0fdf4 !important;
+}
+
 tr.rank-1 td {
   background: #dcfce7 !important;
 }
@@ -366,6 +370,39 @@ tr.rank-1 td:first-child::after {
 
 .summary-card.warn {
   background: linear-gradient(135deg, #b45309, #d97706);
+}
+
+/* Section header */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: bold;
+  color: #1a3a5c;
+  padding: 10px 4px 6px;
+  border-bottom: 2px solid #2e6da4;
+  margin-bottom: 12px;
+}
+
+.section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: #2e6da4;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.section-desc {
+  font-size: 12px;
+  font-weight: normal;
+  color: #888;
+  margin-left: 4px;
 }
 
 /* Optimize panel */

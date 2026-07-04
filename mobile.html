@@ -517,7 +517,7 @@
       <div class="card">
         <div class="card-head">策略提示</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;">
-          <div><b>平均价法：</b>报价略低于预测均价，避免过低被认定为异常</div>
+          <div><b>平均价法：</b>均价为80分，报价低于均价会加分，高于均价会扣分</div>
           <div><b>最低价法：</b>价格优先，需兼顾利润底线</div>
           <div><b>复合基准价：</b>最优点在均价与最低价之间</div>
           <div><b>配合单位策略：</b>通过配合方报价影响基准价走向，为我方创造有利区间</div>
@@ -625,7 +625,7 @@ function renderStrategyParams() {
 
   const tips = {
     lowestPrice:    '最低报价得满分，其他按比例扣分，无需额外参数。',
-    averagePrice:   '基准价 = 所有报价算术平均值，偏差越大扣分越多。',
+    averagePrice:   '基准价 = 所有报价算术平均值；均价80分，低于均价加分，高于均价扣分。',
     compositePrice: '基准价 = 最低价×权重A + 平均价×权重B（之和=1）。',
     fixedBenchmark: '基准价由招标方预先设定（标底价），报价越接近越高分。',
     trimmedAverage: '去掉最高价和最低价各若干个后再取平均作为基准价。',
@@ -644,7 +644,7 @@ function renderStrategyParams() {
 
   const extras = {
     lowestPrice: '',
-    averagePrice: fieldDeduct,
+    averagePrice: '',
     compositePrice: `<div class="field-row" style="margin-top:10px;">
       <div class="field"><label>最低价权重</label><input type="number" data-key="weightLow" value="${p.weightLow}" step="0.05" min="0" max="1" inputmode="decimal"></div>
       <div class="field"><label>平均价权重</label><input type="number" data-key="weightAvg" value="${p.weightAvg}" step="0.05" min="0" max="1" inputmode="decimal"></div>
