@@ -29,10 +29,15 @@ const Scoring = (() => {
     /**
      * 2. 平均价法
      * 评标基准价 = 所有有效报价的算术平均值
-     * 平均价为80分；每低于平均价1%加1分，最高100分；
-     * 每高于平均价1%减1分，最低0分
+     * 平均价得基础分；低于平均价按比例加分；高于平均价按比例扣分；
+     * 最终得分限制在最低分和最高分之间
      */
     averagePrice(bids, fullScore, params = {}) {
+      const baseScore = params.avgBaseScore ?? 80;
+      const lowAdd = params.avgLowAdd ?? 1;
+      const highDeduct = params.avgHighDeduct ?? 1;
+      const maxScore = params.avgMaxScore ?? fullScore;
+      const minScore = params.avgMinScore ?? 0;
       const validBids = bids.filter(b => b.price > 0);
       if (validBids.length === 0) return bids.map(b => ({ ...b, priceScore: 0, benchmark: 0 }));
       const avg = validBids.reduce((s, b) => s + b.price, 0) / validBids.length;
@@ -40,8 +45,8 @@ const Scoring = (() => {
         if (b.price <= 0) return { ...b, priceScore: 0, benchmark: avg };
         const deviation = (b.price - avg) / avg * 100; // 偏差率%
         const score = deviation > 0
-          ? Math.max(0, 80 - deviation)
-          : Math.min(100, 80 + Math.abs(deviation));
+          ? Math.max(minScore, baseScore - deviation * highDeduct)
+          : Math.min(maxScore, baseScore + Math.abs(deviation) * lowAdd);
         return { ...b, priceScore: round(score, 2), benchmark: avg, deviation: round(deviation, 2) };
       });
     },

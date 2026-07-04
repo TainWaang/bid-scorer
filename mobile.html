@@ -563,7 +563,7 @@ const S = {
     businessWeight: 20, priceWeight: 40, techWeight: 40,
     priceFull: 100,
     priceStrategy: 'averagePrice',
-    strategyParams: { deductHigh:0.5, deductLow:0.3, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1 },
+    strategyParams: { deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1 },
   },
   bidders: [
     { id:'my', name:'我方',    price:0, businessScore:80, techScore:85, isMe:true  },
@@ -625,7 +625,7 @@ function renderStrategyParams() {
 
   const tips = {
     lowestPrice:    '最低报价得满分，其他按比例扣分，无需额外参数。',
-    averagePrice:   '基准价 = 所有报价算术平均值；均价80分，低于均价加分，高于均价扣分。',
+    averagePrice:   '基准价 = 所有报价算术平均值；平均价得分、加扣分斜率和上下限均可配置。',
     compositePrice: '基准价 = 最低价×权重A + 平均价×权重B（之和=1）。',
     fixedBenchmark: '基准价由招标方预先设定（标底价），报价越接近越高分。',
     trimmedAverage: '去掉最高价和最低价各若干个后再取平均作为基准价。',
@@ -644,7 +644,15 @@ function renderStrategyParams() {
 
   const extras = {
     lowestPrice: '',
-    averagePrice: '',
+    averagePrice: `<div class="field-row" style="margin-top:10px;">
+      <div class="field"><label>平均价得分</label><input type="number" data-key="avgBaseScore" value="${p.avgBaseScore ?? 80}" step="0.5" inputmode="decimal"></div>
+      <div class="field"><label>最高分</label><input type="number" data-key="avgMaxScore" value="${p.avgMaxScore ?? S.config.priceFull}" step="0.5" inputmode="decimal"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>低于均价每1%加</label><input type="number" data-key="avgLowAdd" value="${p.avgLowAdd ?? 1}" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label>高于均价每1%减</label><input type="number" data-key="avgHighDeduct" value="${p.avgHighDeduct ?? 1}" step="0.1" inputmode="decimal"></div>
+    </div>
+    <div class="field"><label>最低分</label><input type="number" data-key="avgMinScore" value="${p.avgMinScore ?? 0}" step="0.5" inputmode="decimal"></div>`,
     compositePrice: `<div class="field-row" style="margin-top:10px;">
       <div class="field"><label>最低价权重</label><input type="number" data-key="weightLow" value="${p.weightLow}" step="0.05" min="0" max="1" inputmode="decimal"></div>
       <div class="field"><label>平均价权重</label><input type="number" data-key="weightAvg" value="${p.weightAvg}" step="0.05" min="0" max="1" inputmode="decimal"></div>

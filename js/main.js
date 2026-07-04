@@ -16,6 +16,11 @@ const State = {
     strategyParams: {
       deductHigh: 0.5,
       deductLow:  0.3,
+      avgBaseScore: 80,
+      avgLowAdd: 1,
+      avgHighDeduct: 1,
+      avgMaxScore: 100,
+      avgMinScore: 0,
       weightLow:  0.5,
       weightAvg:  0.5,
       benchmark:  0,
@@ -171,7 +176,24 @@ function updateStrategyParams() {
 
   const templates = {
     lowestPrice: `<p class="note">最低报价得满分，其他报价按"满分×(最低价÷本人报价)"计算，无需额外参数。</p>`,
-    averagePrice: `<p class="note">基准价 = 所有有效报价的算术平均值；平均价为80分，低于平均价每1%加1分（最高100分），高于平均价每1%减1分（最低0分）。</p>`,
+    averagePrice: `<div class="form-row">
+      <div class="form-group"><label>平均价得分</label>
+        <input type="number" id="sp-avgBaseScore" value="${p.avgBaseScore ?? 80}" step="0.5" min="0">
+      </div>
+      <div class="form-group"><label>低于平均价每1%加（分）</label>
+        <input type="number" id="sp-avgLowAdd" value="${p.avgLowAdd ?? 1}" step="0.1" min="0">
+      </div>
+      <div class="form-group"><label>高于平均价每1%减（分）</label>
+        <input type="number" id="sp-avgHighDeduct" value="${p.avgHighDeduct ?? 1}" step="0.1" min="0">
+      </div>
+      <div class="form-group"><label>最高分</label>
+        <input type="number" id="sp-avgMaxScore" value="${p.avgMaxScore ?? State.config.priceFull}" step="0.5" min="0">
+      </div>
+      <div class="form-group"><label>最低分</label>
+        <input type="number" id="sp-avgMinScore" value="${p.avgMinScore ?? 0}" step="0.5" min="0">
+      </div>
+    </div>
+    <p class="note">基准价 = 所有有效报价的算术平均值；默认适配当前项目：平均价80分，低于每1%加1分，高于每1%减1分，0~100分封顶。</p>`,
     compositePrice: `<div class="form-row">
       <div class="form-group"><label>最低价权重（0~1）</label>
         <input type="number" id="sp-weightLow" value="${p.weightLow}" step="0.05" min="0" max="1">
@@ -216,7 +238,7 @@ function updateStrategyParams() {
   container.innerHTML = `<div class="strategy-params">${templates[strategy] || ''}</div>`;
 
   // 绑定参数输入事件
-  const paramIds = ['deductHigh','deductLow','weightLow','weightAvg','benchmark','lowerPct','upperPct','deductOut','trimCount'];
+  const paramIds = ['deductHigh','deductLow','avgBaseScore','avgLowAdd','avgHighDeduct','avgMaxScore','avgMinScore','weightLow','weightAvg','benchmark','lowerPct','upperPct','deductOut','trimCount'];
   paramIds.forEach(pid => {
     const el = gi('sp-' + pid);
     if (el) {
@@ -623,19 +645,23 @@ function recommendPartnerPrices(myPrice, competitorPrices, numPartners, config) 
     explanation = '最低价法下报价最低者得满分。配合方须高于我方报价，建议各自拉开梯度，避免相同报价引发质疑。';
 
   } else if (strategy === 'averagePrice') {
-    // 新平均价规则：平均价为80分；我方低于平均价20%及以上才是满分。
-    // 目标均价 = 我方报价 / 0.8，取刚好满分的最低均价，避免无意义拉高配合方报价。
-    const targetAvg = myPrice / 0.8;
+    const baseScore = params.avgBaseScore ?? 80;
+    const lowAdd = params.avgLowAdd ?? 1;
+    const maxScore = params.avgMaxScore ?? priceFull;
+    const requiredBelowPct = lowAdd > 0 ? Math.max(0, (maxScore - baseScore) / lowAdd) : 0;
+    const targetRatio = Math.max(0.01, 1 - requiredBelowPct / 100);
+    // 目标均价 = 我方报价 / 目标报价占均价比例，取刚好达到最高分的最低均价，避免无意义拉高配合方报价。
+    const targetAvg = myPrice / targetRatio;
     const targetSum = targetAvg * n - myPrice - sumComp;
     if (targetSum > myPrice * numPartners * 0.3) {
       const base = targetSum / numPartners;
       for (let i = 0; i < numPartners; i++)
         partnerPrices.push(Math.round(base * (1 + i * 0.01)));
-      explanation = '平均价法下，平均价本身只有80分；我方报价需约低于平均价20%才能拿满100分。配合方按上述报价可把预测均价抬到我方报价的约1.25倍，使我方价格分接近或达到满分。';
+      explanation = `平均价法下，平均价为${baseScore}分；按当前参数，我方报价需约低于平均价${roundText(requiredBelowPct)}%才能达到最高分${maxScore}分。配合方按上述报价可把预测均价抬到该有利区间。`;
     } else {
       for (let i = 0; i < numPartners; i++)
         partnerPrices.push(Math.round(maxKnown * (1.06 + i * 0.04)));
-      explanation = '平均价法下，现有竞争方报价已足以把均价抬高到有利区间；配合方建议高于已知报价并拉开梯度，避免拉低均价影响我方满分区间。';
+      explanation = `平均价法下，现有竞争方报价已足以把均价抬高到有利区间；配合方建议高于已知报价并拉开梯度，避免拉低均价影响我方达到${maxScore}分。`;
     }
 
   } else if (strategy === 'compositePrice') {
@@ -917,6 +943,9 @@ function fmt(num) {
   if (!num && num !== 0) return '-';
   return Number(num).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
 }
+function roundText(num) {
+  return Number(num).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+}
 
 // ========================
 // 快速导入预设
@@ -926,7 +955,7 @@ function loadPreset(name) {
     gov: {
       businessWeight: 20, priceWeight: 40, techWeight: 40,
       priceStrategy: 'averagePrice',
-      strategyParams: { deductHigh: 0.5, deductLow: 0.3 },
+      strategyParams: { avgBaseScore: 80, avgLowAdd: 1, avgHighDeduct: 1, avgMaxScore: 100, avgMinScore: 0 },
       label: '政府采购（商务20/价格40/技术40）'
     },
     infra: {
