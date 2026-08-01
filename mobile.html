@@ -2,82 +2,114 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>报价评分情景模拟器</title>
   <style>
     :root {
-      --blue: #1d4ed8;
-      --blue-light: #3b82f6;
+      color-scheme: light;
+      --blue: #2563eb;
+      --blue-light: #60a5fa;
       --blue-dark: #1e3a8a;
-      --green: #16a34a;
+      --blue-soft: #eff6ff;
+      --green: #15803d;
+      --green-soft: #f0fdf4;
       --red: #dc2626;
-      --orange: #d97706;
-      --bg: #f1f5f9;
+      --red-soft: #fef2f2;
+      --orange: #c2410c;
+      --orange-soft: #fff7ed;
+      --bg: #f5f7fb;
       --card: #ffffff;
+      --surface-muted: #f8fafc;
       --border: #e2e8f0;
-      --text: #1e293b;
-      --text2: #64748b;
-      --text3: #94a3b8;
-      --nav-h: 60px;
-      --header-h: 52px;
+      --border-strong: #cbd5e1;
+      --text: #172033;
+      --text2: #5f6b7d;
+      --text3: #64748b;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 12px 28px rgba(30, 64, 175, 0.18);
+      --hero-gradient: linear-gradient(135deg, var(--blue-dark), var(--blue));
+      --nav-h: 64px;
+      --header-h: 60px;
+      --radius-sm: 10px;
       --radius: 14px;
+      --radius-lg: 18px;
+      --radius-pill: 999px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
+    button, input, select, textarea { font: inherit; }
+    button, a { touch-action: manipulation; }
+
     body {
       font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      min-width: 320px;
       background: var(--bg);
       color: var(--text);
       font-size: 15px;
       overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
     }
 
     /* ── Header ── */
     .header {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
       height: var(--header-h);
-      background: linear-gradient(135deg, var(--blue-dark), var(--blue));
+      background: var(--hero-gradient);
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 16px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      gap: 12px; padding: 0 16px;
+      box-shadow: 0 8px 24px rgba(30, 58, 138, 0.18);
     }
-    .header-title { color: #fff; font-size: 17px; font-weight: 600; }
-    .header-sub { color: rgba(255,255,255,0.7); font-size: 11px; margin-top: 1px; }
+    .header-title { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: 0.01em; white-space: nowrap; }
+    .header-sub { color: rgba(255,255,255,0.72); font-size: 11px; margin-top: 2px; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+    .desktop-link {
+      color: rgba(255,255,255,0.82); font-size: 12px; text-decoration: none;
+      padding: 7px 2px;
+    }
     .header-btn {
       background: rgba(255,255,255,0.2);
-      border: none; color: #fff; border-radius: 20px;
-      padding: 6px 14px; font-size: 13px; font-family: inherit;
-      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.28); color: #fff;
+      border-radius: var(--radius-pill); min-height: 34px;
+      padding: 6px 13px; font-size: 13px; font-weight: 600;
+      cursor: pointer; backdrop-filter: blur(8px);
     }
 
     /* ── Bottom Nav ── */
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
       height: var(--nav-h);
-      background: #fff;
+      background: rgba(255,255,255,0.96);
       border-top: 1px solid var(--border);
       display: flex;
-      box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+      box-shadow: 0 -8px 24px rgba(15,23,42,0.06);
+      backdrop-filter: blur(16px);
     }
     .nav-item {
       flex: 1; display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 2px;
+      justify-content: center; gap: 3px;
       border: none; background: none; cursor: pointer;
-      color: var(--text3); font-size: 10px; font-family: inherit;
-      padding-bottom: 4px;
+      color: var(--text3); font-size: 10px; font-weight: 600;
+      padding: 5px 2px 4px;
       transition: color 0.2s;
     }
     .nav-item.active { color: var(--blue); }
-    .nav-icon { font-size: 20px; line-height: 1; }
+    .nav-icon {
+      display: grid; place-items: center; width: 34px; height: 28px;
+      border-radius: var(--radius-pill); line-height: 1;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .nav-icon svg { width: 19px; height: 19px; stroke: currentColor; }
+    .nav-item.active .nav-icon { background: var(--blue-soft); transform: translateY(-1px); }
     .nav-badge {
       position: absolute;
       top: 4px; right: calc(50% - 14px);
       background: var(--red); color: #fff;
-      font-size: 9px; border-radius: 8px;
+      font-size: 9px; border-radius: var(--radius-pill);
       padding: 1px 4px; min-width: 14px; text-align: center;
+      box-shadow: 0 0 0 2px #fff;
     }
     .nav-item { position: relative; }
 
@@ -97,108 +129,121 @@
       width: 20%; height: 100%;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 12px 12px 16px;
+      padding: 16px 14px 24px;
+      scrollbar-width: thin;
     }
+    .page > * { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; }
 
     /* ── Card ── */
     .card {
       background: var(--card);
-      border-radius: var(--radius);
+      border: 1px solid rgba(226,232,240,0.9);
+      border-radius: var(--radius-lg);
       padding: 16px;
-      margin-bottom: 12px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-sm);
     }
     .card-head {
-      font-size: 14px; font-weight: 700; color: var(--blue-dark);
-      margin-bottom: 12px;
-      display: flex; align-items: center; gap: 6px;
+      font-size: 15px; font-weight: 750; color: var(--text);
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
     }
     .card-head::before {
       content: ''; display: block;
-      width: 3px; height: 14px;
-      background: var(--blue); border-radius: 2px; flex-shrink: 0;
+      width: 4px; height: 16px;
+      background: var(--blue); border-radius: var(--radius-pill); flex-shrink: 0;
     }
 
     /* ── Form ── */
-    .field { margin-bottom: 14px; }
+    .field { margin-bottom: 16px; min-width: 0; }
     .field:last-child { margin-bottom: 0; }
     .field label {
       display: block; font-size: 12px; color: var(--text2);
-      margin-bottom: 5px; font-weight: 500;
+      margin-bottom: 6px; font-weight: 600;
     }
     .field input, .field select, .field textarea {
-      width: 100%; padding: 11px 13px;
-      border: 1.5px solid var(--border);
-      border-radius: 10px; font-size: 15px;
-      font-family: inherit; color: var(--text);
-      background: #f8fafc;
-      transition: border-color 0.2s, background 0.2s;
+      width: 100%; min-height: 46px; padding: 11px 13px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm); font-size: 15px;
+      color: var(--text); background: var(--surface-muted);
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
       -webkit-appearance: none;
     }
-    .field textarea { resize: vertical; line-height: 1.6; }
+    .field textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+    .field select {
+      padding-right: 38px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2364748b' stroke-width='1.8'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;
+    }
     .field input:focus, .field select:focus, .field textarea:focus {
       outline: none; border-color: var(--blue);
       background: #fff;
-      box-shadow: 0 0 0 3px rgba(29,78,216,0.08);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
     }
     .field input.highlight {
-      border-color: var(--blue); background: #eff6ff;
+      border-color: var(--blue); background: var(--blue-soft);
     }
     .field-row { display: flex; gap: 10px; }
     .field-row .field { flex: 1; margin-bottom: 0; }
+    .field-row + .field, .field-row + .field-row { margin-top: 16px; }
+    #m-strat-params > .field,
+    #m-strat-params > .field-row { margin-top: 12px; }
 
     /* ── Weight bar ── */
     .weight-bar {
-      height: 8px; border-radius: 4px; background: var(--border);
-      margin: 6px 0 2px; overflow: hidden;
+      height: 8px; border-radius: var(--radius-pill); background: var(--border);
+      margin: 8px 0 5px; overflow: hidden;
     }
-    .weight-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .weight-fill {
+      width: 100%; height: 100%; border-radius: var(--radius-pill); transition: width 0.3s;
+      background: linear-gradient(90deg, var(--blue) 20%, var(--green) 20% 60%, var(--orange) 60%);
+    }
     .weight-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); }
 
     /* ── Btn ── */
     .btn {
       display: flex; align-items: center; justify-content: center; gap: 6px;
-      width: 100%; padding: 14px;
-      border: none; border-radius: 12px;
-      font-size: 16px; font-family: inherit; font-weight: 600;
-      cursor: pointer; transition: all 0.15s; letter-spacing: 0.5px;
+      width: 100%; min-height: 48px; padding: 12px 16px;
+      border: 1px solid transparent; border-radius: var(--radius);
+      font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
+      letter-spacing: 0.02em;
     }
     .btn:active { transform: scale(0.97); }
-    .btn-blue { background: var(--blue); color: #fff; }
-    .btn-green { background: var(--green); color: #fff; }
-    .btn-outline { background: #fff; color: var(--blue); border: 1.5px solid var(--blue); }
+    .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 8px 18px rgba(37,99,235,0.2); }
+    .btn-outline { background: #fff; color: var(--blue); border-color: #93c5fd; }
     .btn-sm {
       width: auto; padding: 8px 16px; font-size: 13px;
-      border-radius: 8px; font-weight: 500;
+      border-radius: var(--radius-sm); font-weight: 600;
     }
     .btn-danger-sm {
-      background: #fee2e2; color: var(--red);
-      border: none; border-radius: 8px;
-      padding: 7px 13px; font-size: 13px;
-      font-family: inherit; cursor: pointer;
+      background: var(--red-soft); color: var(--red);
+      border: 1px solid #fecaca; border-radius: var(--radius-sm);
+      min-height: 34px; padding: 7px 12px; font-size: 12px;
+      font-weight: 600; cursor: pointer;
     }
 
     /* ── Bidder Card ── */
     .bidder-card {
       background: var(--card);
-      border-radius: var(--radius);
-      padding: 14px;
-      margin-bottom: 10px;
-      border: 1.5px solid var(--border);
-      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
     }
-    .bidder-card.me { border-color: var(--blue); background: #eff6ff; }
+    .bidder-card.me { border-color: #93c5fd; background: linear-gradient(180deg, var(--blue-soft), #fff 75%); }
     .bidder-head {
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 12px;
     }
     .bidder-name-wrap { display: flex; align-items: center; gap: 8px; }
     .badge {
-      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      display: inline-block; padding: 3px 9px; border-radius: var(--radius-pill);
       font-size: 11px; font-weight: 600;
     }
-    .badge-me { background: #fef9c3; color: #854d0e; }
-    .badge-comp { background: #e0f2fe; color: #075985; }
+    .badge-me { background: var(--blue); color: #fff; }
+    .badge-comp { background: #e2e8f0; color: #475569; }
     .bidder-name-input {
       background: transparent; border: none; font-size: 15px;
       font-weight: 600; color: var(--text); font-family: inherit;
@@ -209,71 +254,75 @@
     .score-field { flex: 1; }
     .score-field label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; }
     .score-field input {
-      width: 100%; padding: 8px 10px;
-      border: 1.5px solid var(--border); border-radius: 8px;
-      font-size: 14px; font-family: inherit; background: #fff;
+      width: 100%; min-height: 42px; padding: 8px 10px;
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      font-size: 14px; background: #fff;
       text-align: center;
     }
-    .score-field input:focus { outline: none; border-color: var(--blue); }
+    .score-field input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
 
     /* ── Result ── */
     .rank-card {
-      border-radius: var(--radius);
-      padding: 18px;
-      margin-bottom: 10px;
+      background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-left: 4px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      margin-bottom: 12px;
       position: relative; overflow: hidden;
+      box-shadow: var(--shadow-sm);
     }
-    .rank-card.first { background: linear-gradient(135deg, #15803d, #16a34a); color: #fff; }
-    .rank-card.second { background: linear-gradient(135deg, #1e40af, #2563eb); color: #fff; }
-    .rank-card.other { background: var(--card); color: var(--text); border: 1.5px solid var(--border); }
+    .rank-card.first { background: var(--green-soft); border-color: #bbf7d0; border-left-color: var(--green); }
+    .rank-card.second { background: var(--blue-soft); border-color: #bfdbfe; border-left-color: var(--blue); }
+    .rank-card.other { background: var(--card); }
     .rank-num {
       position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-      font-size: 56px; font-weight: 900; opacity: 0.12; line-height: 1;
+      font-size: 54px; font-weight: 900; color: var(--text3); opacity: 0.16; line-height: 1;
     }
-    .rank-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .rank-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; overflow-wrap: anywhere; }
     .rank-total { font-size: 28px; font-weight: 900; margin-bottom: 8px; }
     .rank-meta { display: flex; gap: 12px; flex-wrap: wrap; }
-    .rank-meta-item { font-size: 12px; opacity: 0.85; }
+    .rank-meta-item { font-size: 12px; color: var(--text2); }
     .rank-meta-item span { font-weight: 700; font-size: 13px; }
 
     .my-summary {
-      background: linear-gradient(135deg, var(--blue-dark), var(--blue));
-      border-radius: var(--radius); padding: 18px; color: #fff;
-      margin-bottom: 12px;
+      background: var(--hero-gradient);
+      border-radius: var(--radius-lg); padding: 18px; color: #fff;
+      margin-bottom: 14px; box-shadow: var(--shadow-md);
     }
-    .my-summary-title { font-size: 13px; opacity: 0.8; margin-bottom: 6px; }
-    .my-summary-rank { font-size: 42px; font-weight: 900; line-height: 1; }
-    .my-summary-sub { font-size: 13px; opacity: 0.7; margin-top: 4px; }
+    .my-summary-title { font-size: 13px; opacity: 0.86; margin-bottom: 6px; }
+    .my-summary-rank { font-size: clamp(34px, 10vw, 42px); font-weight: 900; line-height: 1; }
+    .my-summary-sub { font-size: 13px; opacity: 0.8; margin-top: 4px; }
     .my-summary-scores {
       display: grid; grid-template-columns: 1fr 1fr 1fr;
       gap: 8px; margin-top: 14px;
     }
-    .my-score-item { background: rgba(255,255,255,0.15); border-radius: 8px; padding: 10px; text-align: center; }
-    .my-score-item .si-label { font-size: 11px; opacity: 0.75; margin-bottom: 3px; }
+    .my-score-item { background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); padding: 10px 6px; text-align: center; }
+    .my-score-item .si-label { font-size: 11px; opacity: 0.82; margin-bottom: 3px; }
     .my-score-item .si-val { font-size: 18px; font-weight: 800; }
 
     /* ── Optimize ── */
     .opt-result {
-      background: linear-gradient(135deg, #1e3a5f, #2563eb);
-      border-radius: var(--radius); padding: 18px; color: #fff;
-      margin-bottom: 12px;
+      background: var(--hero-gradient);
+      border-radius: var(--radius-lg); padding: 18px; color: #fff;
+      margin-bottom: 14px; box-shadow: var(--shadow-md);
     }
-    .opt-result-title { font-size: 13px; opacity: 0.8; margin-bottom: 8px; }
-    .opt-price { font-size: 32px; font-weight: 900; margin-bottom: 4px; }
+    .opt-result-title { font-size: 13px; opacity: 0.86; margin-bottom: 8px; }
+    .opt-price { font-size: clamp(26px, 8vw, 32px); font-weight: 900; margin-bottom: 4px; overflow-wrap: anywhere; }
     .opt-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
-    .opt-meta-item .oml { font-size: 11px; opacity: 0.75; }
+    .opt-meta-item .oml { font-size: 11px; opacity: 0.82; }
     .opt-meta-item .omv { font-size: 16px; font-weight: 700; }
+    .result-context { font-size: 11px; opacity: 0.82; margin-top: 12px; line-height: 1.55; }
 
     /* ── Sensitivity ── */
     .sens-row {
       display: flex; align-items: center; gap: 8px;
-      padding: 9px 0; border-bottom: 1px solid var(--border);
+      padding: 11px 0; border-bottom: 1px solid var(--border);
     }
     .sens-row:last-child { border-bottom: none; }
     .sens-price { font-size: 13px; color: var(--text2); width: 90px; flex-shrink: 0; }
     .sens-bar-wrap { flex: 1; }
     .sens-bar {
-      height: 10px; border-radius: 5px;
+      height: 10px; border-radius: var(--radius-pill);
       background: var(--blue); transition: width 0.3s;
     }
     .sens-bar.rank1 { background: var(--green); }
@@ -285,61 +334,99 @@
 
     /* ── Scenario ── */
     .scenario-card {
-      background: var(--card); border-radius: var(--radius);
-      border: 1.5px solid var(--border);
-      padding: 14px; margin-bottom: 10px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+      background: var(--card); border-radius: var(--radius-lg);
+      border: 1px solid var(--border); border-left: 4px solid var(--border-strong);
+      padding: 16px; margin-bottom: 12px;
+      box-shadow: var(--shadow-sm);
     }
-    .scenario-card.s-first { border-color: var(--green); }
+    .scenario-card.s-first { background: var(--green-soft); border-color: #bbf7d0; border-left-color: var(--green); }
     .sc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .sc-name { font-size: 15px; font-weight: 700; }
-    .sc-rank { font-size: 22px; font-weight: 900; color: var(--blue); }
+    .sc-rank { font-size: 20px; font-weight: 850; color: var(--text2); }
     .sc-rank.first { color: var(--green); }
-    .sc-details { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-    .sc-detail-item { text-align: center; }
+    .sc-rank.second { color: var(--blue); }
+    .scenario-sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+    .scenario-total { font-size: 22px; font-weight: 850; color: var(--text); }
+    .align-right { text-align: right; }
+    .sc-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .sc-detail-item { min-width: 0; text-align: center; }
     .sc-detail-item .dl { font-size: 11px; color: var(--text3); }
-    .sc-detail-item .dv { font-size: 14px; font-weight: 600; color: var(--text); }
+    .sc-detail-item .dv { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 
     /* ── Preset chips ── */
-    .preset-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .preset-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .preset-chip {
-      background: #eff6ff; color: var(--blue);
-      border: 1.5px solid #bfdbfe;
-      border-radius: 20px; padding: 7px 14px;
-      font-size: 13px; font-family: inherit;
+      min-height: 42px; background: var(--blue-soft); color: var(--blue);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius-sm); padding: 8px 12px;
+      font-size: 13px; font-weight: 600;
       cursor: pointer; transition: all 0.15s;
     }
     .preset-chip:active { background: var(--blue); color: #fff; }
 
     /* ── Strategy tip ── */
     .strat-tip {
-      background: #eff6ff; border: 1px solid #bfdbfe;
-      border-radius: 10px; padding: 12px;
-      font-size: 13px; color: #1e40af; line-height: 1.7;
+      background: var(--blue-soft); border: 1px solid #bfdbfe;
+      border-radius: var(--radius-sm); padding: 12px;
+      font-size: 13px; color: var(--blue-dark); line-height: 1.7;
       margin-top: 8px;
     }
 
     /* ── Misc ── */
-    .note { font-size: 12px; color: var(--text3); line-height: 1.6; margin-top: 6px; }
+    .note { font-size: 12px; color: var(--text2); line-height: 1.65; margin-top: 8px; }
+    .error-note { color: var(--red); }
+    .target-label { color: var(--blue); font-weight: 700; }
+    .text-center { text-align: center; }
+    .section-gap { margin-top: 14px; }
+    .action-gap { margin-bottom: 12px; }
+    .status-wrap { margin-top: 10px; }
+    .info-list, .strategy-list { padding-left: 18px; font-size: 13px; color: var(--text2); line-height: 1.8; }
+    .strategy-list { padding-left: 0; list-style: none; }
+    .strategy-list div + div { margin-top: 6px; }
+    .sens-score-sub { font-size: 10px; color: var(--text3); font-weight: 500; }
+    .value-compact { font-size: 12px !important; }
     .divider { height: 1px; background: var(--border); margin: 14px 0; }
-    .tag-sum { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+    .tag-sum { display: inline-block; padding: 4px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 700; }
     .tag-ok { background: #dcfce7; color: #166534; }
-    .tag-err { background: #fee2e2; color: #991b1b; }
+    .tag-err { background: var(--red-soft); color: #991b1b; }
     .benchmark-tip {
-      background: #fef9c3; border: 1px solid #fde68a;
-      border-radius: 8px; padding: 10px 12px;
-      font-size: 13px; color: #92400e; margin-top: 8px;
+      background: var(--orange-soft); border: 1px solid #fed7aa;
+      border-radius: var(--radius-sm); padding: 12px;
+      font-size: 13px; color: #9a3412; margin: 0 0 14px;
     }
     .empty-tip {
-      text-align: center; padding: 40px 20px;
+      text-align: center; padding: 48px 20px;
       color: var(--text3); font-size: 14px;
     }
     .empty-icon { font-size: 36px; margin-bottom: 8px; }
+
+    :focus-visible { outline: 3px solid rgba(37,99,235,0.28); outline-offset: 2px; }
+
+    @media (max-width: 374px) {
+      .header { padding-left: 12px; padding-right: 12px; gap: 8px; }
+      .header-title { font-size: 15px; }
+      .header-sub { display: none; }
+      .desktop-link { font-size: 11px; }
+      .header-btn { padding-left: 10px; padding-right: 10px; font-size: 12px; }
+      .page { padding-left: 10px; padding-right: 10px; }
+      .card, .bidder-card, .scenario-card, .rank-card { padding: 14px; }
+      .sens-price { width: 70px; }
+      .sens-score { width: 68px; }
+      .sens-rank { width: 36px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
 
     /* Safe area */
     @supports (padding-bottom: env(safe-area-inset-bottom)) {
       .bottom-nav { padding-bottom: env(safe-area-inset-bottom); height: calc(var(--nav-h) + env(safe-area-inset-bottom)); }
       .scroll-wrap { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); }
+    }
+    @supports (padding-top: env(safe-area-inset-top)) {
+      .header { padding-top: env(safe-area-inset-top); height: calc(var(--header-h) + env(safe-area-inset-top)); }
+      .scroll-wrap { top: calc(var(--header-h) + env(safe-area-inset-top)); }
     }
   </style>
 </head>
@@ -351,8 +438,8 @@
     <div class="header-title">报价评分情景模拟器</div>
     <div class="header-sub">独立数据 · 公开公式 · 情景分析</div>
   </div>
-  <div style="display:flex;gap:8px;align-items:center;">
-    <a href="index.html" style="color:rgba(255,255,255,0.75);font-size:12px;text-decoration:none;">桌面版</a>
+  <div class="header-actions">
+    <a href="index.html" class="desktop-link">桌面版</a>
     <button class="header-btn" onclick="quickCalc()">立即计算</button>
   </div>
 </div>
@@ -381,14 +468,14 @@
           </div>
         </div>
         <div class="weight-bar">
-          <div class="weight-fill" id="weight-fill" style="width:100%;background:linear-gradient(90deg,#1d4ed8 20%,#16a34a 20% 60%,#d97706 60%);"></div>
+          <div class="weight-fill" id="weight-fill"></div>
         </div>
         <div class="weight-labels">
           <span id="wl-bw">商务 20%</span>
           <span id="wl-pw">价格 40%</span>
           <span id="wl-tw">技术 40%</span>
         </div>
-        <div style="margin-top:8px;">
+        <div class="status-wrap">
           <span class="tag-sum tag-ok" id="weight-tag">合计 100%</span>
         </div>
       </div>
@@ -420,7 +507,7 @@
         </div>
       </div>
 
-      <button class="btn btn-blue" onclick="quickCalc()">
+      <button class="btn btn-primary" onclick="quickCalc()">
         <span>计算评分</span><span>→</span>
       </button>
 
@@ -431,17 +518,17 @@
 
       <div id="bidder-list"></div>
 
-      <button class="btn btn-outline" onclick="addBidder()" style="margin-bottom:12px;">
+      <button class="btn btn-outline action-gap" onclick="addBidder()">
         <span>+</span><span>添加其他样本</span>
       </button>
 
-      <button class="btn btn-blue" onclick="quickCalc()">
+      <button class="btn btn-primary" onclick="quickCalc()">
         <span>计算评分</span><span>→</span>
       </button>
 
-      <div class="card" style="margin-top:12px;">
+      <div class="card section-gap">
         <div class="card-head">填写说明</div>
-        <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:16px;">
+        <ul class="info-list">
           <li>商务分/技术分：填写独立假设值</li>
           <li>其他报价：填写用户自行设定的情景样本</li>
           <li>目标报价可留空，在“优化”页面自动求解</li>
@@ -487,10 +574,10 @@
           <label>搜索步长（元）</label>
           <input type="number" id="m-opt-step" inputmode="numeric" placeholder="如 1000">
         </div>
-        <button class="btn btn-green" onclick="runOptimize()" style="margin-top:4px;">
+        <button class="btn btn-primary" onclick="runOptimize()">
           <span>搜索最优报价</span>
         </button>
-        <p class="note" style="margin-top:8px;">适用于多个主体分别独立测算：每次只选择一个目标，其他样本保持输入值不变，不进行联动或批量推荐。可添加任意数量、任意样本数的情景。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，自动切换 ≤5个、6–10个、≥11个规则；报价不要使用千位分隔符。各情景等权，先最大化价格得分并列第一比例，再比较最低分、平均分，同分时选择较高报价。留空则使用当前报价样本列表。</p>
+        <p class="note">适用于多个主体分别独立测算：每次只选择一个目标，其他样本保持输入值不变，不进行联动或批量推荐。可添加任意数量、任意样本数的情景。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，自动切换 ≤5个、6–10个、≥11个规则；报价不要使用千位分隔符。各情景等权，先最大化价格得分并列第一比例，再比较最低分、平均分，同分时选择较高报价。留空则使用当前报价样本列表。</p>
       </div>
 
       <div id="opt-result-box"></div>
@@ -511,10 +598,10 @@
           <label>方案名称</label>
           <input type="text" id="m-scenario-name" placeholder="如：稳健方案 / 激进报价">
         </div>
-        <button class="btn btn-green" onclick="saveScenario()">
+        <button class="btn btn-primary" onclick="saveScenario()">
           <span>保存当前方案</span>
         </button>
-        <p class="note" style="margin-top:6px;">基于当前填写的目标报价和配置保存</p>
+        <p class="note">基于当前填写的目标报价和配置保存</p>
       </div>
 
       <div id="scenario-list">
@@ -526,7 +613,7 @@
 
       <div class="card">
         <div class="card-head">策略提示</div>
-        <div style="font-size:13px;color:var(--text2);line-height:2;">
+        <div class="strategy-list">
           <div><b>平均价法：</b>均价为80分，报价低于均价会加分，高于均价会扣分</div>
           <div><b>最低价法：</b>价格优先，需兼顾利润底线</div>
           <div><b>复合基准价：</b>最优点在均价与最低价之间</div>
@@ -542,24 +629,24 @@
 <!-- Bottom Nav -->
 <div class="bottom-nav">
   <button class="nav-item active" onclick="switchPage(0,this)">
-    <span class="nav-icon">⚙️</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="2" fill="currentColor" stroke="none"/></svg></span>
     <span>规则</span>
   </button>
   <button class="nav-item" onclick="switchPage(1,this)">
-    <span class="nav-icon">👥</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
     <span>样本</span>
     <span class="nav-badge" id="bidder-badge">3</span>
   </button>
   <button class="nav-item" onclick="switchPage(2,this)">
-    <span class="nav-icon">📊</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
     <span>结果</span>
   </button>
   <button class="nav-item" onclick="switchPage(3,this)">
-    <span class="nav-icon">🎯</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg></span>
     <span>优化</span>
   </button>
   <button class="nav-item" onclick="switchPage(4,this)">
-    <span class="nav-icon">📋</span>
+    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3M9 3h6v4H9zM8 12h8M8 16h6"/></svg></span>
     <span>方案</span>
     <span class="nav-badge" id="scenario-badge" style="display:none;">0</span>
   </button>
@@ -617,7 +704,7 @@ function updateWeights() {
   if (sum===100) { tag.textContent='合计 100% ✓'; tag.className='tag-sum tag-ok'; }
   else { tag.textContent=`合计 ${sum}%（应为100）`; tag.className='tag-sum tag-err'; }
   // bar
-  gi('weight-fill').style.background = `linear-gradient(90deg,#1d4ed8 ${bw}%,#16a34a ${bw}% ${bw+pw}%,#d97706 ${bw+pw}%)`;
+  gi('weight-fill').style.background = `linear-gradient(90deg,var(--blue) ${bw}%,var(--green) ${bw}% ${bw+pw}%,var(--orange) ${bw+pw}%)`;
 }
 
 // ── Strategy Params ──
@@ -651,7 +738,7 @@ function renderStrategyParams() {
   };
 
   const fieldDeduct = `
-    <div class="field-row" style="margin-top:10px;">
+    <div class="field-row">
       <div class="field"><label>高于基准价每1%扣（分）</label>
         <input type="number" data-key="deductHigh" value="${p.deductHigh}" step="0.1" inputmode="decimal">
       </div>
@@ -662,7 +749,7 @@ function renderStrategyParams() {
 
   const extras = {
     lowestPrice: '',
-    averagePrice: `<div class="field-row" style="margin-top:10px;">
+    averagePrice: `<div class="field-row">
       <div class="field"><label>平均价得分</label><input type="number" data-key="avgBaseScore" value="${p.avgBaseScore ?? 80}" step="0.5" inputmode="decimal"></div>
       <div class="field"><label>最高分</label><input type="number" data-key="avgMaxScore" value="${p.avgMaxScore ?? S.config.priceFull}" step="0.5" inputmode="decimal"></div>
     </div>
@@ -671,19 +758,19 @@ function renderStrategyParams() {
       <div class="field"><label>高于均价每1%减</label><input type="number" data-key="avgHighDeduct" value="${p.avgHighDeduct ?? 1}" step="0.1" inputmode="decimal"></div>
     </div>
     <div class="field"><label>最低分</label><input type="number" data-key="avgMinScore" value="${p.avgMinScore ?? 0}" step="0.5" inputmode="decimal"></div>`,
-    compositePrice: `<div class="field-row" style="margin-top:10px;">
+    compositePrice: `<div class="field-row">
       <div class="field"><label>最低价权重</label><input type="number" data-key="weightLow" value="${p.weightLow}" step="0.05" min="0" max="1" inputmode="decimal"></div>
       <div class="field"><label>平均价权重</label><input type="number" data-key="weightAvg" value="${p.weightAvg}" step="0.05" min="0" max="1" inputmode="decimal"></div>
     </div>${fieldDeduct}`,
-    fixedBenchmark: `<div class="field" style="margin-top:10px;">
+    fixedBenchmark: `<div class="field">
       <label>固定基准价（元）</label>
       <input type="number" data-key="benchmark" value="${p.benchmark}" step="10000" inputmode="numeric">
     </div>${fieldDeduct}`,
-    trimmedAverage: `<div class="field" style="margin-top:10px;">
+    trimmedAverage: `<div class="field">
       <label>去掉最高/最低各几个</label>
       <input type="number" data-key="trimCount" value="${p.trimCount}" step="1" min="1" max="3" inputmode="numeric">
     </div>${fieldDeduct}`,
-    tieredTrimmedBenchmark: `<div class="field-row" style="margin-top:10px;">
+    tieredTrimmedBenchmark: `<div class="field-row">
       <div class="field"><label>高档阈值（大于）</label><input type="number" data-key="tierHighThreshold" value="${p.tierHighThreshold ?? 10}" step="1" inputmode="numeric"></div>
       <div class="field"><label>高档去两端各</label><input type="number" data-key="tierHighTrim" value="${p.tierHighTrim ?? 2}" step="1" inputmode="numeric"></div>
     </div>
@@ -704,7 +791,7 @@ function renderStrategyParams() {
       <div class="field"><label>低于每1%加</label><input type="number" data-key="tierLowAdd" value="${p.tierLowAdd ?? 0.5}" step="0.1" inputmode="decimal"></div>
     </div>
     <div class="field"><label>最高分</label><input type="number" data-key="tierMaxScore" value="${p.tierMaxScore ?? 40}" step="0.5" inputmode="decimal"></div>`,
-    intervalScore: `<div class="field" style="margin-top:10px;">
+    intervalScore: `<div class="field">
       <label>基准价（元）</label>
       <input type="number" data-key="benchmark" value="${p.benchmark}" step="10000" inputmode="numeric">
     </div>
@@ -746,7 +833,7 @@ function renderBidders() {
         ${b.isMe ? '' : `<button class="btn-danger-sm" onclick="removeBidder(${idx})">删除</button>`}
       </div>
       <div class="field">
-        <label>报价（元）${b.isMe?'<span style="color:#1d4ed8;font-weight:600;"> 目标</span>':''}</label>
+        <label>报价（元）${b.isMe?'<span class="target-label"> 目标</span>':''}</label>
         <input type="number" value="${b.price||''}" placeholder="${b.isMe?'填写目标报价':'填写其他假设报价'}"
           class="${b.isMe?'highlight':''}" inputmode="numeric" step="1000"
           oninput="S.bidders[${idx}].price=+this.value"
@@ -830,7 +917,7 @@ function renderResult() {
     </div>`;
   });
 
-  html += `<div class="note" style="text-align:center;margin-top:4px;">
+  html += `<div class="note text-center">
     权重：商务${config.businessWeight}% · 价格${config.priceWeight}% · 技术${config.techWeight}%<br>
     策略：${Scoring.strategyNames[config.priceStrategy]}
   </div>`;
@@ -892,7 +979,7 @@ function runOptimize() {
   try {
     scenarios = Scoring.parsePriceScenarios(gi('m-opt-scenarios').value,others);
   } catch (error) {
-    gi('opt-result-box').innerHTML = `<div class="card"><p class="note" style="color:var(--red);">${escapeHtml(error.message)}</p></div>`;
+    gi('opt-result-box').innerHTML = `<div class="card"><p class="note error-note">${escapeHtml(error.message)}</p></div>`;
     gi('sens-card').style.display = 'none';
     return;
   }
@@ -913,7 +1000,7 @@ function runOptimize() {
   try {
     optimization = Scoring.optimizePriceAcrossScenarios(targetBidder.id,scenarios,config,{minPrice:minP,maxPrice:maxP,step});
   } catch (error) {
-    gi('opt-result-box').innerHTML = `<div class="card"><p class="note" style="color:var(--red);">${escapeHtml(error.message)}</p></div>`;
+    gi('opt-result-box').innerHTML = `<div class="card"><p class="note error-note">${escapeHtml(error.message)}</p></div>`;
     gi('sens-card').style.display = 'none';
     return;
   }
@@ -937,7 +1024,7 @@ function runOptimize() {
       <div class="opt-meta-item"><div class="oml">最低 / 平均价格分</div><div class="omv">${fmtPriceScore(best.minScore,config.priceStrategy)} / ${fmtPriceScore(best.avgScore,config.priceStrategy)}</div></div>
       <div class="opt-meta-item"><div class="oml">最差价格排名</div><div class="omv">第${best.worstRank}名</div></div>
     </div>
-    <div style="font-size:11px;opacity:.8;margin-top:10px;">规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy]||config.priceStrategy)}；${optimization.scenarioCount}个等权情景；样本数量覆盖：${countsText}；只改变目标报价</div>
+    <div class="result-context">规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy]||config.priceStrategy)}；${optimization.scenarioCount}个等权情景；样本数量覆盖：${countsText}；只改变目标报价</div>
   </div>
   <div class="card"><div class="card-head">推荐价逐情景结果</div>${detailsHtml}</div>`;
 
@@ -947,7 +1034,7 @@ function runOptimize() {
     return `<div class="sens-row">
       <div class="sens-price">¥${fmtShort(candidate.price)}</div>
       <div class="sens-bar-wrap"><div class="sens-bar ${cls}" style="width:${pct}%"></div></div>
-      <div class="sens-score">第一${candidate.topRate}%<br><span style="font-size:10px;color:var(--text3);">最低${fmtPriceScore(candidate.minScore,config.priceStrategy)}</span></div>
+      <div class="sens-score">第一${candidate.topRate}%<br><span class="sens-score-sub">最低${fmtPriceScore(candidate.minScore,config.priceStrategy)}</span></div>
       <div class="sens-rank">最差<br>第${candidate.worstRank}名</div>
     </div>`;
   }).join('');
@@ -993,18 +1080,18 @@ function renderScenarios() {
       <div class="sc-head">
         <div>
           <div class="sc-name">${escapeHtml(s.name)}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.strategy}</div>
+          <div class="scenario-sub">${s.strategy}</div>
         </div>
-        <div style="text-align:right;">
-          <div class="sc-rank ${s.rank===1?'first':(s.rank===2?'':'')}" style="${s.rank===1?'color:var(--green)':s.rank===2?'color:var(--blue)':'color:var(--text2)'}">
+        <div class="align-right">
+          <div class="sc-rank ${s.rank===1?'first':(s.rank===2?'second':'')}">
             第${s.rank}名
           </div>
-          <div style="font-size:22px;font-weight:900;color:var(--text);">${s.total.toFixed(2)}</div>
+          <div class="scenario-total">${s.total.toFixed(2)}</div>
         </div>
       </div>
       <div class="sc-details">
-        <div class="sc-detail-item"><div class="dl">报价</div><div class="dv" style="font-size:12px;">¥${fmtShort(s.price)}</div></div>
-        <div class="sc-detail-item"><div class="dl">商务/价格/技术</div><div class="dv" style="font-size:12px;">${s.businessScore}/${fmtPriceScore(s.priceScore, s.strategy)}/${s.techScore}</div></div>
+        <div class="sc-detail-item"><div class="dl">报价</div><div class="dv value-compact">¥${fmtShort(s.price)}</div></div>
+        <div class="sc-detail-item"><div class="dl">商务/价格/技术</div><div class="dv value-compact">${s.businessScore}/${fmtPriceScore(s.priceScore, s.strategy)}/${s.techScore}</div></div>
         <div class="sc-detail-item">
           <button class="btn-danger-sm" onclick="removeScenario(${i})">删除</button>
         </div>
