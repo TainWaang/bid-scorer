@@ -200,9 +200,13 @@
 
     <div class="card">
       <div class="card-title">最优报价搜索</div>
+      <div class="form-group" style="min-width:280px;margin-bottom:12px;">
+        <label>本次独立分析目标（每次仅选择一个）</label>
+        <select id="opt-target"></select>
+      </div>
       <div class="form-group" style="width:100%;margin-bottom:12px;">
         <label>其他报价样本情景（每行一个情景，不包含目标报价）</label>
-        <textarea id="opt-scenarios" rows="6" placeholder="总5家: 1010000, 1030000, 1070000, 1090000&#10;总8家: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11家: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
+        <textarea id="opt-scenarios" rows="6" placeholder="总5个: 1010000, 1030000, 1070000, 1090000&#10;总8个: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11个: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -221,7 +225,7 @@
           <button class="btn btn-success" id="btn-search-optimal">搜索最优报价</button>
         </div>
       </div>
-      <p class="note">可添加任意数量、任意样本数的情景；每行冒号后填写用户独立设定的其他报价样本。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，并切换 ≤5个、6–10个、≥11个的基准价规则。报价不使用千位分隔符。各情景等权，系统只改变目标报价，先最大化价格得分并列第一的情景比例，再比较最低价格分、平均价格分，同分时选择较高报价。情景留空时使用当前报价样本列表中的已填数据。</p>
+      <p class="note">适用于多个主体分别进行独立测算：每次只选择一个目标，其他样本保持输入值不变，不进行联动或批量推荐。可添加任意数量、任意样本数的情景；每行冒号后填写用户独立设定的其他报价样本。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，并切换 ≤5个、6–10个、≥11个的基准价规则。报价不使用千位分隔符。各情景等权，先最大化价格得分并列第一的情景比例，再比较最低价格分、平均价格分，同分时选择较高报价。情景留空时使用当前报价样本列表中的已填数据。</p>
     </div>
 
     <div id="optimize-result-box"></div>
@@ -327,6 +331,7 @@ function updateBidderName(idx, value) {
   State.bidders[idx].name = value;
   renderBidderTable();
   renderPredictTable();
+  renderOptimizeTargetOptions();
   saveState();
 }
 </script>

@@ -339,13 +339,14 @@ function renderBidderNamesPanel() {
       <span class="badge ${b.isMe ? 'badge-yellow' : 'badge-blue'}" style="min-width:36px;text-align:center;">
         ${b.isMe ? '目标' : String(idx)}
       </span>
-      <input type="text" value="${b.name}" placeholder="单位名称"
+      <input type="text" value="${escapeHtml(b.name)}" placeholder="样本名称"
         style="width:200px;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"
         oninput="updateBidderName(${idx}, this.value)">
       ${!b.isMe ? `<button class="btn btn-danger" onclick="removeBidder(${idx})">删除</button>` : ''}
     `;
     list.appendChild(row);
   });
+  renderOptimizeTargetOptions();
 }
 
 // ========================
@@ -360,7 +361,7 @@ function renderBidderTable() {
     if (b.isMe) tr.classList.add('my-row');
     tr.innerHTML = `
       <td>${b.isMe ? '<span class="badge badge-yellow">目标</span>' : `<span class="badge badge-blue">${idx}</span>`}</td>
-      <td style="font-weight:${b.isMe ? 'bold' : 'normal'};">${b.name}</td>
+      <td style="font-weight:${b.isMe ? 'bold' : 'normal'};">${escapeHtml(b.name)}</td>
       <td><input type="number" value="${b.price || ''}" placeholder="输入报价"
           style="width:130px;padding:4px 6px;border:1px solid ${b.isMe ? '#2e6da4' : '#d1d5db'};border-radius:4px;${b.isMe ? 'background:#eff6ff;' : ''}"
           oninput="updateBidder(${idx},'price',+this.value)"></td>
@@ -468,7 +469,7 @@ function renderResult() {
   const tbodyHtml = result.map(b => `
     <tr class="${b.isMe ? 'my-row' : ''} ${b.rank === 1 ? 'rank-1' : ''}">
       <td><strong>${b.rank}</strong></td>
-      <td>${b.name}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
+      <td>${escapeHtml(b.name)}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
       <td>${fmt(b.price)}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
       <td>${fmtPriceScore(b.priceScore, config.priceStrategy)}</td>
@@ -496,7 +497,7 @@ function renderPredictTable() {
     const tr = document.createElement('tr');
     if (b.isMe) tr.classList.add('my-row');
     tr.innerHTML = `
-      <td>${b.isMe ? '<span class="badge badge-yellow">目标</span> ' : ''}${b.name}</td>
+      <td>${b.isMe ? '<span class="badge badge-yellow">目标</span> ' : ''}${escapeHtml(b.name)}</td>
       <td><input type="number" class="predict-price-input" data-id="${b.id}"
           value="${b.price > 0 ? b.price : ''}" placeholder="输入预测报价"
           oninput="updateBidderPriceById('${b.id}', +this.value)"
@@ -552,7 +553,7 @@ function calcPredictResult() {
   const tbodyHtml = ranked.map(b => `
     <tr class="${b.isMe ? 'my-row' : ''} ${b.priceRank === 1 ? 'rank-1' : ''}">
       <td><strong>${b.priceRank}</strong></td>
-      <td>${b.name}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
+      <td>${escapeHtml(b.name)}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
       <td>${b.price > 0 ? '¥ ' + fmt(b.price) : '<span style="color:#bbb;">未填</span>'}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
       <td><strong>${fmtPriceScore(b.priceScore, strategy)}</strong></td>
@@ -577,6 +578,20 @@ function escapeHtml(value) {
   })[char]);
 }
 
+function renderOptimizeTargetOptions() {
+  const select = gi('opt-target');
+  if (!select) return;
+  const previousId = select.value;
+  const defaultBidder = State.bidders.find(bidder => bidder.isMe) || State.bidders[0];
+  select.innerHTML = State.bidders.map(bidder =>
+    `<option value="${escapeHtml(bidder.id)}">${escapeHtml(bidder.name)}</option>`
+  ).join('');
+  const selectedId = State.bidders.some(bidder => bidder.id === previousId)
+    ? previousId
+    : defaultBidder?.id;
+  if (selectedId) select.value = selectedId;
+}
+
 function sampleOptimizationCandidates(candidates, best, maxRows = 25) {
   if (candidates.length <= maxRows) return candidates;
   const stride = Math.ceil(candidates.length / maxRows);
@@ -589,14 +604,15 @@ function sampleOptimizationCandidates(candidates, best, maxRows = 25) {
 
 function renderOptimize() {
   renderPredictTable();
+  renderOptimizeTargetOptions();
 
   const config = buildConfig();
   if (!validateConfig(config)) return;
 
-  const myBidder = State.bidders.find(b => b.isMe);
-  if (!myBidder) return;
+  const targetBidder = State.bidders.find(bidder => bidder.id === gi('opt-target').value);
+  if (!targetBidder) return;
 
-  const others = State.bidders.filter(b => !b.isMe && b.price > 0);
+  const others = State.bidders.filter(bidder => bidder.id !== targetBidder.id && bidder.price > 0);
   let scenarios;
   try {
     scenarios = Scoring.parsePriceScenarios(gi('opt-scenarios').value, others);
@@ -627,7 +643,7 @@ function renderOptimize() {
   let optimization;
   try {
     optimization = Scoring.optimizePriceAcrossScenarios(
-      myBidder.id,
+      targetBidder.id,
       scenarios,
       config,
       { minPrice: searchMin, maxPrice: searchMax, step }
@@ -639,19 +655,19 @@ function renderOptimize() {
   }
 
   const best = optimization.best;
-  const countsText = optimization.participantCounts.map(count => `${count}家`).join('、');
+  const countsText = optimization.participantCounts.map(count => `${count}个`).join('、');
   const detailRows = best.details.map(detail => `<tr>
     <td>${escapeHtml(detail.name)}</td>
     <td>${detail.participantCount}</td>
     <td>${detail.benchmark == null ? '—' : '¥ ' + fmtBenchmark(detail.benchmark, config.priceStrategy)}</td>
     <td><strong>${fmtPriceScore(detail.priceScore, config.priceStrategy)}</strong></td>
     <td>第${detail.priceRank}名${detail.isTop ? '（并列第一）' : ''}</td>
-    <td>${detail.trimCount == null ? '—' : `最高/最低各${detail.trimCount}家`}</td>
+    <td>${detail.trimCount == null ? '—' : `最高/最低各${detail.trimCount}个`}</td>
   </tr>`).join('');
 
   const optHtml = `
     <div class="optimize-result">
-      <h3>多情景最优报价推荐</h3>
+      <h3>${escapeHtml(targetBidder.name)} · 多情景最优报价推荐</h3>
       <div class="optimize-grid">
         <div class="optimize-item">
           <div class="oi-label">推荐报价</div>
@@ -758,7 +774,7 @@ function renderScenarios() {
   const maxTotal = Math.max(...State.scenarios.map(s => s.total));
   const rows = State.scenarios.map((s, i) => `
     <tr class="${s.rank === 1 ? 'rank-1' : ''}">
-      <td>${s.name}</td>
+      <td>${escapeHtml(s.name)}</td>
       <td><small style="color:#888;">${s.strategy}</small></td>
       <td>¥ ${fmt(s.price)}</td>
       <td>${s.businessScore}</td>

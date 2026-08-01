@@ -466,8 +466,12 @@
       <div class="card">
         <div class="card-head">多情景最优报价</div>
         <div class="field">
+          <label>本次独立分析目标（每次仅选择一个）</label>
+          <select id="m-opt-target"></select>
+        </div>
+        <div class="field">
           <label>其他报价样本情景（每行一个，不含目标报价）</label>
-          <textarea id="m-opt-scenarios" rows="5" placeholder="总5家: 1010000, 1030000, 1070000, 1090000&#10;总8家: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11家: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
+          <textarea id="m-opt-scenarios" rows="5" placeholder="总5个: 1010000, 1030000, 1070000, 1090000&#10;总8个: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11个: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
         </div>
         <div class="field-row">
           <div class="field">
@@ -486,7 +490,7 @@
         <button class="btn btn-green" onclick="runOptimize()" style="margin-top:4px;">
           <span>搜索最优报价</span>
         </button>
-        <p class="note" style="margin-top:8px;">可添加任意数量、任意样本数的情景。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，自动切换 ≤5个、6–10个、≥11个规则；报价不要使用千位分隔符。各情景等权，系统只改变目标报价，先最大化价格得分并列第一比例，再比较最低分、平均分，同分时选择较高报价。留空则使用当前报价样本列表。</p>
+        <p class="note" style="margin-top:8px;">适用于多个主体分别独立测算：每次只选择一个目标，其他样本保持输入值不变，不进行联动或批量推荐。可添加任意数量、任意样本数的情景。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，自动切换 ≤5个、6–10个、≥11个规则；报价不要使用千位分隔符。各情景等权，先最大化价格得分并列第一比例，再比较最低分、平均分，同分时选择较高报价。留空则使用当前报价样本列表。</p>
       </div>
 
       <div id="opt-result-box"></div>
@@ -736,7 +740,7 @@ function renderBidders() {
       <div class="bidder-head">
         <div class="bidder-name-wrap">
           <span class="badge ${b.isMe?'badge-me':'badge-comp'}">${b.isMe?'目标':'样本'}</span>
-          <input class="bidder-name-input" type="text" value="${b.name}"
+          <input class="bidder-name-input" type="text" value="${escapeHtml(b.name)}"
             onchange="S.bidders[${idx}].name=this.value">
         </div>
         ${b.isMe ? '' : `<button class="btn-danger-sm" onclick="removeBidder(${idx})">删除</button>`}
@@ -763,6 +767,7 @@ function renderBidders() {
     list.appendChild(div);
   });
   gi('bidder-badge').textContent = S.bidders.length;
+  renderMobileOptimizeTargets();
 }
 
 function addBidder() {
@@ -813,7 +818,7 @@ function renderResult() {
     const cls = b.rank===1?'first':b.rank===2?'second':'other';
     html += `<div class="rank-card ${cls}">
       <div class="rank-num">${b.rank}</div>
-      <div class="rank-name">${b.name}${b.isMe?'（目标）':''}</div>
+      <div class="rank-name">${escapeHtml(b.name)}${b.isMe?'（目标）':''}</div>
       <div class="rank-total">${b.total.toFixed(4)}</div>
       <div class="rank-meta">
         <div class="rank-meta-item">报价 <span>¥${fmt(b.price)}</span></div>
@@ -850,9 +855,25 @@ function sampleMobileCandidates(candidates,best,maxRows=20) {
   return sampled.sort((left,right)=>left.price-right.price);
 }
 
+function renderMobileOptimizeTargets() {
+  const select = gi('m-opt-target');
+  if (!select) return;
+  const previousId = select.value;
+  const defaultBidder = S.bidders.find(bidder=>bidder.isMe) || S.bidders[0];
+  select.innerHTML = S.bidders.map(bidder=>
+    `<option value="${escapeHtml(bidder.id)}">${escapeHtml(bidder.name)}</option>`
+  ).join('');
+  const selectedId = S.bidders.some(bidder=>bidder.id===previousId)
+    ? previousId
+    : defaultBidder?.id;
+  if (selectedId) select.value=selectedId;
+}
+
 function initOptimizeDefaults() {
+  renderMobileOptimizeTargets();
   if (gi('m-opt-min').value && gi('m-opt-max').value) return;
-  const others = S.bidders.filter(b=>!b.isMe && b.price>0);
+  const targetId = gi('m-opt-target').value;
+  const others = S.bidders.filter(bidder=>bidder.id!==targetId && bidder.price>0);
   if (others.length > 0) {
     const prices = others.map(b=>b.price);
     gi('m-opt-min').value = Math.round(Math.min(...prices)*0.85);
@@ -862,9 +883,11 @@ function initOptimizeDefaults() {
 }
 
 function runOptimize() {
+  renderMobileOptimizeTargets();
   const config = buildConfig();
-  const myBidder = S.bidders.find(b=>b.isMe);
-  const others = S.bidders.filter(b=>!b.isMe && b.price>0);
+  const targetBidder = S.bidders.find(bidder=>bidder.id===gi('m-opt-target').value);
+  if (!targetBidder) return;
+  const others = S.bidders.filter(bidder=>bidder.id!==targetBidder.id && bidder.price>0);
   let scenarios;
   try {
     scenarios = Scoring.parsePriceScenarios(gi('m-opt-scenarios').value,others);
@@ -888,26 +911,26 @@ function runOptimize() {
 
   let optimization;
   try {
-    optimization = Scoring.optimizePriceAcrossScenarios(myBidder.id,scenarios,config,{minPrice:minP,maxPrice:maxP,step});
+    optimization = Scoring.optimizePriceAcrossScenarios(targetBidder.id,scenarios,config,{minPrice:minP,maxPrice:maxP,step});
   } catch (error) {
     gi('opt-result-box').innerHTML = `<div class="card"><p class="note" style="color:var(--red);">${escapeHtml(error.message)}</p></div>`;
     gi('sens-card').style.display = 'none';
     return;
   }
   const best = optimization.best;
-  const countsText = optimization.participantCounts.map(count=>`${count}家`).join('、');
+  const countsText = optimization.participantCounts.map(count=>`${count}个`).join('、');
   const detailsHtml = best.details.map(detail=>`<div class="scenario-card ${detail.isTop?'s-first':''}">
-    <div class="sc-head"><div class="sc-name">${escapeHtml(detail.name)} · ${detail.participantCount}家</div><div class="sc-rank ${detail.isTop?'first':''}">第${detail.priceRank}名</div></div>
+    <div class="sc-head"><div class="sc-name">${escapeHtml(detail.name)} · ${detail.participantCount}个</div><div class="sc-rank ${detail.isTop?'first':''}">第${detail.priceRank}名</div></div>
     <div class="sc-details">
       <div class="sc-detail-item"><div class="dl">基准价</div><div class="dv">${detail.benchmark==null?'—':'¥'+fmtBenchmark(detail.benchmark,config.priceStrategy)}</div></div>
       <div class="sc-detail-item"><div class="dl">目标价格分</div><div class="dv">${fmtPriceScore(detail.priceScore,config.priceStrategy)}</div></div>
-      <div class="sc-detail-item"><div class="dl">去高/去低</div><div class="dv">${detail.trimCount==null?'—':`各${detail.trimCount}家`}</div></div>
+      <div class="sc-detail-item"><div class="dl">去高/去低</div><div class="dv">${detail.trimCount==null?'—':`各${detail.trimCount}个`}</div></div>
     </div>
   </div>`).join('');
 
   const box = gi('opt-result-box');
   box.innerHTML = `<div class="opt-result">
-    <div class="opt-result-title">多情景最优报价推荐</div>
+    <div class="opt-result-title">${escapeHtml(targetBidder.name)} · 多情景最优报价推荐</div>
     <div class="opt-price">¥ ${fmt(best.price)}</div>
     <div class="opt-meta">
       <div class="opt-meta-item"><div class="oml">价格第一情景</div><div class="omv">${best.topRate}%</div></div>
@@ -969,7 +992,7 @@ function renderScenarios() {
     <div class="scenario-card ${s.rank===1?'s-first':''}">
       <div class="sc-head">
         <div>
-          <div class="sc-name">${s.name}</div>
+          <div class="sc-name">${escapeHtml(s.name)}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:2px;">${s.strategy}</div>
         </div>
         <div style="text-align:right;">

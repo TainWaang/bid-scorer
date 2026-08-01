@@ -157,6 +157,17 @@ for (const candidate of multiScenario.candidates) {
 }
 assert.ok(multiScenario.best.price >= 90 && multiScenario.best.price <= 110);
 
+const independentlySelectedTarget = Scoring.optimizePriceAcrossScenarios(
+  'sample-b',
+  [{ name: '独立情景', bidders: [96, 100, 104, 108] }],
+  optimizationConfig,
+  { minPrice: 85, maxPrice: 105, step: 5 }
+);
+assert.strictEqual(independentlySelectedTarget.scenarioCount, 1);
+assert.strictEqual(independentlySelectedTarget.best.details[0].participantCount, 5);
+assert.strictEqual(independentlySelectedTarget.best.details[0].trimCount, 0);
+assert.ok(independentlySelectedTarget.best.price >= 85 && independentlySelectedTarget.best.price <= 105);
+
 const higherPriceTieBreak = Scoring.optimizePriceAcrossScenarios(
   'my',
   [{ name: '同分情景', bidders: [95, 105] }],
