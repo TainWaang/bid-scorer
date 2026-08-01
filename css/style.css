@@ -132,7 +132,8 @@ h1 span {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
   padding: 7px 10px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
@@ -143,7 +144,8 @@ h1 span {
 }
 
 .form-group input:focus,
-.form-group select:focus {
+.form-group select:focus,
+.form-group textarea:focus {
   outline: none;
   border-color: #2e6da4;
   box-shadow: 0 0 0 2px rgba(46,109,164,0.1);
@@ -245,10 +247,6 @@ tr:hover td {
 tr.my-row td {
   background: #fef9c3 !important;
   font-weight: bold;
-}
-
-tr.partner-row td {
-  background: #f0fdf4 !important;
 }
 
 tr.rank-1 td {

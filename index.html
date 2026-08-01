@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>公开投标评分计算器</title>
+  <title>报价评分情景模拟器</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-<h1>公开投标综合评分计算器
-  <span>商务评分 · 价格评分 · 技术评分 | 报价策略优化</span>
+<h1>报价评分情景模拟器
+  <span>独立数据输入 · 公开公式计算 · 多情景敏感性分析</span>
   <a href="mobile.html" style="float:right;font-size:13px;color:rgba(255,255,255,0.8);text-decoration:none;background:rgba(255,255,255,0.15);padding:4px 12px;border-radius:20px;margin-top:2px;">手机版</a>
 </h1>
 
@@ -39,7 +39,7 @@
       <div class="form-row">
         <div class="form-group" style="min-width:300px;">
           <label>项目名称</label>
-          <input type="text" id="cfg-project" placeholder="填写招标项目名称（可选）">
+          <input type="text" id="cfg-project" placeholder="填写项目或测算名称（可选）">
         </div>
       </div>
     </div>
@@ -66,7 +66,7 @@
           <input type="number" id="cfg-price-full" value="100" min="1" max="100" step="1">
         </div>
       </div>
-      <p class="note">三项权重之和必须等于100%；价格分项满分通常为100，部分招标文件会规定为其他值</p>
+      <p class="note">三项权重之和必须等于100%；价格分项满分通常为100，也可按适用规则设置为其他值</p>
     </div>
 
     <div class="card">
@@ -78,7 +78,7 @@
             <option value="lowestPrice">最低价法（最低报价得满分）</option>
             <option value="averagePrice" selected>平均价法（平均值为基准价）</option>
             <option value="compositePrice">复合基准价法（最低价+平均价加权）</option>
-            <option value="fixedBenchmark">固定基准价法（标底法）</option>
+            <option value="fixedBenchmark">固定基准价法</option>
             <option value="trimmedAverage">去高去低平均价法</option>
             <option value="tieredTrimmedBenchmark">分档去高去低×系数法</option>
             <option value="intervalScore">区间得分法</option>
@@ -91,20 +91,20 @@
     <div class="card">
       <div class="card-title">快速加载预设方案</div>
       <div class="form-row">
-        <button class="btn btn-primary btn-sm" onclick="loadPreset('gov')">政府采购通用</button>
-        <button class="btn btn-primary btn-sm" onclick="loadPreset('infra')">基础设施工程</button>
-        <button class="btn btn-primary btn-sm" onclick="loadPreset('tech')">信息化项目</button>
-        <button class="btn btn-primary btn-sm" onclick="loadPreset('lowest')">最低价竞标型</button>
+        <button class="btn btn-primary btn-sm" onclick="loadPreset('gov')">通用评分模板</button>
+        <button class="btn btn-primary btn-sm" onclick="loadPreset('infra')">价格权重较高</button>
+        <button class="btn btn-primary btn-sm" onclick="loadPreset('tech')">技术权重较高</button>
+        <button class="btn btn-primary btn-sm" onclick="loadPreset('lowest')">价格优先模板</button>
       </div>
-      <p class="note">预设方案仅供参考，请根据实际招标文件调整参数</p>
+      <p class="note">预设仅用于演示，请根据实际适用规则独立调整参数</p>
     </div>
 
     <div class="card">
-      <div class="card-title">投标方名称配置</div>
-      <p class="note" style="margin-bottom:12px;">在此管理所有参与投标的单位名称，报价与评分在"③ 综合评分"中填写。</p>
+      <div class="card-title">报价样本配置</div>
+      <p class="note" style="margin-bottom:12px;">在此管理参与计算的报价样本，报价与评分在“③ 综合评分”中填写。示例名称均为虚构。</p>
       <div id="bidder-names-list"></div>
       <div style="margin-top:10px;">
-        <button class="btn btn-primary" id="btn-add-bidder">+ 添加竞争方</button>
+        <button class="btn btn-primary" id="btn-add-bidder">+ 添加其他样本</button>
       </div>
     </div>
 
@@ -116,7 +116,7 @@
     <div class="card">
       <div class="card-title">报价与评分录入</div>
       <p class="note" style="margin-bottom:12px;">
-        投标方名称在"① 评分规则配置"中管理；价格得分由系统根据报价和当前评分策略自动计算。
+        报价样本名称在“① 评分规则配置”中管理；价格得分由系统根据报价和当前评分方法自动计算。
       </p>
       <div class="table-wrap">
         <table>
@@ -166,20 +166,20 @@
     <div class="section-header">
       <span class="section-num">①</span>
       场景模拟
-      <span class="section-desc">已知各方报价，直接查看价格得分与排名</span>
+      <span class="section-desc">输入独立报价样本，查看价格得分与排名</span>
     </div>
 
     <div class="card">
       <div class="card-title">即时报价模拟</div>
       <p class="note" style="margin-bottom:12px;">
-        输入各方预测报价，按当前价格评分规则计算价格得分与排名。综合得分（含商务/技术）请到"③ 综合评分"查看。
+        输入独立假设的报价样本，按当前价格评分规则计算价格得分与排名。综合得分（含商务/技术）请到“③ 综合评分”查看。
       </p>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th style="width:120px;">投标方</th>
-              <th style="width:180px;">预测报价（元）</th>
+              <th style="width:120px;">报价样本</th>
+              <th style="width:180px;">假设报价（元）</th>
             </tr>
           </thead>
           <tbody id="predict-tbody"></tbody>
@@ -191,15 +191,19 @@
       <div id="predict-result-box" style="margin-top:16px;"></div>
     </div>
 
-    <!-- 分组二：我方报价决策 -->
+    <!-- 分组二：目标报价决策 -->
     <div class="section-header" style="margin-top:24px;">
       <span class="section-num">②</span>
-      我方报价决策
-      <span class="section-desc">我方报价未定时，系统帮你找最优报价并分析得分区间</span>
+      目标报价决策
+      <span class="section-desc">目标报价未定时，搜索最优报价并分析得分区间</span>
     </div>
 
     <div class="card">
       <div class="card-title">最优报价搜索</div>
+      <div class="form-group" style="width:100%;margin-bottom:12px;">
+        <label>其他报价样本情景（每行一个情景，不包含目标报价）</label>
+        <textarea id="opt-scenarios" rows="6" placeholder="总5家: 1010000, 1030000, 1070000, 1090000&#10;总8家: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11家: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>最低搜索价格（元）</label>
@@ -211,67 +215,33 @@
         </div>
         <div class="form-group">
           <label>搜索步长（元）</label>
-          <input type="number" id="opt-step" placeholder="如 1000" step="100" min="100">
+          <input type="number" id="opt-step" placeholder="如 1000" step="any" min="0">
         </div>
         <div style="display:flex;align-items:flex-end;">
           <button class="btn btn-success" id="btn-search-optimal">搜索最优报价</button>
         </div>
       </div>
-      <p class="note">在区间内从高到低扫描，找到使我方综合排名第一的最高报价（利润最大化）</p>
+      <p class="note">可添加任意数量、任意样本数的情景；每行冒号后填写用户独立设定的其他报价样本。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，并切换 ≤5个、6–10个、≥11个的基准价规则。报价不使用千位分隔符。各情景等权，系统只改变目标报价，先最大化价格得分并列第一的情景比例，再比较最低价格分、平均价格分，同分时选择较高报价。情景留空时使用当前报价样本列表中的已填数据。</p>
     </div>
 
     <div id="optimize-result-box"></div>
 
     <div class="card" style="margin-top:16px;">
       <div class="card-title">价格敏感性分析</div>
-      <p class="note" style="margin-bottom:10px;">在上方搜索区间内，展示我方不同报价对应的价格得分、综合得分及排名变化</p>
+      <p class="note" style="margin-bottom:10px;">展示不同目标报价在全部自定义情景中的价格得分并列第一比例、最低分和平均分</p>
       <div class="table-wrap sensitivity-chart">
         <table>
           <thead>
             <tr>
               <th>报价（元）</th>
-              <th>价格得分</th>
-              <th>综合得分（可视化）</th>
-              <th>排名</th>
+              <th>价格第一比例</th>
+              <th>最低分 / 平均分</th>
+              <th>最差排名</th>
             </tr>
           </thead>
           <tbody id="sensitivity-tbody"></tbody>
         </table>
       </div>
-    </div>
-
-    <!-- 分组三：协同策略 -->
-    <div class="section-header" style="margin-top:24px;">
-      <span class="section-num">③</span>
-      协同策略
-      <span class="section-desc">我方报价已定，推算配合方如何报价最有利</span>
-    </div>
-
-    <div class="card">
-      <div class="card-title">配合方报价策略分析</div>
-      <p class="note" style="margin-bottom:12px;">
-        已知我方确定报价与竞争方报价，按当前价格评分规则推算配合方的最优报价方案。
-      </p>
-      <div class="form-row">
-        <div class="form-group">
-          <label>我方确定报价（元）</label>
-          <input type="number" id="ps-my-price" placeholder="输入我方报价"
-            style="border-color:#2e6da4;background:#eff6ff;">
-        </div>
-        <div class="form-group">
-          <label>配合方数量</label>
-          <select id="ps-partner-count">
-            <option value="1">1家</option>
-            <option value="2" selected>2家</option>
-            <option value="3">3家</option>
-          </select>
-        </div>
-      </div>
-      <div id="ps-competitor-inputs" style="margin-top:4px;"></div>
-      <div class="flex-end" style="margin-top:12px;">
-        <button class="btn btn-success" id="btn-partner-strategy">分析报价策略</button>
-      </div>
-      <div id="ps-result-box" style="margin-top:16px;"></div>
     </div>
 
   </div>
@@ -282,7 +252,7 @@
     <div class="card">
       <div class="card-title">新建情景方案</div>
       <p class="note" style="margin-bottom:12px;">
-        每套方案独立设置我方报价与商务/技术得分假设，竞争方数据沿用"③ 综合评分"中的配置。
+        每套方案独立设置目标报价与商务/技术得分假设，其他样本沿用“③ 综合评分”中的配置。
       </p>
       <div class="form-row">
         <div class="form-group" style="min-width:220px;">
@@ -290,7 +260,7 @@
           <input type="text" id="scenario-name" placeholder="如：保守方案 / 激进方案">
         </div>
         <div class="form-group">
-          <label>我方报价（元）</label>
+          <label>目标报价（元）</label>
           <input type="number" id="scenario-my-price" placeholder="输入报价"
             style="border-color:#2e6da4;background:#eff6ff;">
         </div>
@@ -317,14 +287,12 @@
     </div>
 
     <div class="card">
-      <div class="card-title">策略建议</div>
+      <div class="card-title">用途与边界</div>
       <ul style="line-height:2.2;font-size:13px;color:#555;padding-left:20px;">
-        <li><strong>最低价法：</strong>报价越低越有利，需权衡利润与排名，建议略低于竞争对手最低价</li>
-        <li><strong>平均价法：</strong>可按项目配置平均价得分、低价加分、高价扣分、最高分和最低分</li>
-        <li><strong>复合基准价法：</strong>既要靠近最低价又要接近均价，最优点通常在均价与最低价之间</li>
-        <li><strong>固定基准价法：</strong>尽量贴近标底价，一般建议报价在标底价的97%~103%范围内</li>
-        <li><strong>综合策略：</strong>在商务分和技术分有优势时，可适当提高报价；劣势时需加大价格竞争力</li>
-        <li><strong>配合单位：</strong>可将配合单位报价设为刻意抬高或拉低，影响均价/最低价，为我方创造有利基准</li>
+        <li>本工具只对用户独立输入的假设数据执行公开公式计算。</li>
+        <li>系统只搜索目标报价，其他样本始终保持用户输入值不变。</li>
+        <li>页面中的名称和示例数字均为虚构，不对应任何真实项目或参与主体。</li>
+        <li>测算结果仅用于内部分析，不构成任何专业意见。</li>
       </ul>
     </div>
 

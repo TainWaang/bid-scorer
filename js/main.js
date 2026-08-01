@@ -11,7 +11,7 @@ const State = {
     businessWeight: 20,
     priceWeight: 40,
     techWeight: 40,
-    priceFull: 100,       // 价格满分（通常=100，但有时招标文件会规定不同满分）
+    priceFull: 100,       // 价格满分（通常=100，也可按适用规则调整）
     priceStrategy: 'averagePrice',
     strategyParams: {
       deductHigh: 0.5,
@@ -43,9 +43,9 @@ const State = {
     myBidderId: 'my',
   },
   bidders: [
-    { id: 'my',   name: '我方',   price: 0, businessScore: 80, techScore: 85, isMe: true  },
-    { id: 'b1',   name: '竞争方A', price: 0, businessScore: 78, techScore: 82, isMe: false },
-    { id: 'b2',   name: '竞争方B', price: 0, businessScore: 76, techScore: 80, isMe: false },
+    { id: 'my',   name: '目标方案', price: 0, businessScore: 80, techScore: 85, isMe: true  },
+    { id: 'b1',   name: '其他样本A', price: 0, businessScore: 78, techScore: 82, isMe: false },
+    { id: 'b2',   name: '其他样本B', price: 0, businessScore: 76, techScore: 80, isMe: false },
   ],
   scenarios: [],      // 方案对比
   predictPrices: {},  // 预测模拟报价 { bidderId: price }
@@ -71,7 +71,7 @@ function loadSavedState() {
     if (Array.isArray(saved.bidders) && saved.bidders.length > 0) {
       State.bidders = saved.bidders.map((b, idx) => ({
         id: b.id || (idx === 0 ? 'my' : 'b' + Date.now() + idx),
-        name: b.name || (idx === 0 ? '我方' : '竞争方' + idx),
+        name: b.name || (idx === 0 ? '目标方案' : '其他样本' + idx),
         price: +b.price || 0,
         businessScore: +b.businessScore || 0,
         techScore: +b.techScore || 0,
@@ -235,12 +235,12 @@ function updateStrategyParams() {
     </div>
     <p class="note">基准价 = 最低价×权重A + 平均价×权重B，权重之和应为1</p>`,
     fixedBenchmark: `<div class="form-row">
-      <div class="form-group"><label>标底基准价（元）</label>
+      <div class="form-group"><label>固定基准价（元）</label>
         <input type="number" id="sp-benchmark" value="${p.benchmark}" step="10000" min="0">
       </div>
       ${commonDeduct}
     </div>
-    <p class="note">基准价由招标方设定（标底价），偏差越小得分越高</p>`,
+    <p class="note">基准价由用户按适用规则预先设置，偏差越小得分越高</p>`,
     trimmedAverage: `<div class="form-row">
       <div class="form-group"><label>去掉最高/最低各几个</label>
         <input type="number" id="sp-trimCount" value="${p.trimCount}" step="1" min="1" max="3">
@@ -283,7 +283,7 @@ function updateStrategyParams() {
         <input type="number" id="sp-tierMaxScore" value="${p.tierMaxScore ?? 40}" step="0.5" min="0">
       </div>
     </div>
-    <p class="note">默认规则：有效投标人&gt;10家时去高去低各2家，6~10家各1家，≤5家不去除；剩余报价均值×0.95，基准价保留6位。基准价35分，高扣0.5、低加0.5，30~40分封顶。当前以报价&gt;0判定有效，无效投标请删除或将报价留空。</p>`,
+    <p class="note">默认规则：有效报价&gt;10个时去高去低各2个，6~10个各1个，≤5个不去除；剩余报价均值×0.95，基准价保留6位。基准价35分，高扣0.5、低加0.5，30~40分封顶。当前以报价&gt;0判定有效，无效样本请删除或将报价留空。</p>`,
     intervalScore: `<div class="form-row">
       <div class="form-group"><label>基准价（元）</label>
         <input type="number" id="sp-benchmark" value="${p.benchmark}" step="10000" min="0">
@@ -321,7 +321,7 @@ function updateStrategyParams() {
 }
 
 // ========================
-// 投标方名称面板（Tab 1）
+// 报价样本名称面板（Tab 1）
 // ========================
 function initBidderNamesPanel() {
   renderBidderNamesPanel();
@@ -337,7 +337,7 @@ function renderBidderNamesPanel() {
     row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;';
     row.innerHTML = `
       <span class="badge ${b.isMe ? 'badge-yellow' : 'badge-blue'}" style="min-width:36px;text-align:center;">
-        ${b.isMe ? '我方' : String(idx)}
+        ${b.isMe ? '目标' : String(idx)}
       </span>
       <input type="text" value="${b.name}" placeholder="单位名称"
         style="width:200px;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"
@@ -359,7 +359,7 @@ function renderBidderTable() {
     const tr = document.createElement('tr');
     if (b.isMe) tr.classList.add('my-row');
     tr.innerHTML = `
-      <td>${b.isMe ? '<span class="badge badge-yellow">我方</span>' : `<span class="badge badge-blue">${idx}</span>`}</td>
+      <td>${b.isMe ? '<span class="badge badge-yellow">目标</span>' : `<span class="badge badge-blue">${idx}</span>`}</td>
       <td style="font-weight:${b.isMe ? 'bold' : 'normal'};">${b.name}</td>
       <td><input type="number" value="${b.price || ''}" placeholder="输入报价"
           style="width:130px;padding:4px 6px;border:1px solid ${b.isMe ? '#2e6da4' : '#d1d5db'};border-radius:4px;${b.isMe ? 'background:#eff6ff;' : ''}"
@@ -379,7 +379,7 @@ function addBidder() {
   const idx = State.bidders.length;
   State.bidders.push({
     id: 'b' + Date.now(),
-    name: '竞争方' + String.fromCharCode(64 + idx),
+    name: '其他样本' + String.fromCharCode(64 + idx),
     price: 0,
     businessScore: 75,
     techScore: 78,
@@ -402,7 +402,6 @@ function updateBidder(idx, field, value) {
   State.bidders[idx][field] = value;
   if (field === 'price') {
     renderPredictTable();
-    renderPartnerStrategyInputs();
   }
   saveState();
 }
@@ -412,7 +411,6 @@ function updateBidderPriceById(id, value) {
   if (!bidder) return;
   bidder.price = value > 0 ? value : 0;
   renderBidderTable();
-  renderPartnerStrategyInputs();
   saveState();
 }
 
@@ -434,22 +432,22 @@ function renderResult() {
   // 摘要
   const sumHtml = `
     <div class="summary-card ${me && me.rank === 1 ? 'highlight' : me && me.rank <= 2 ? '' : 'warn'}">
-      <div class="label">我方综合排名</div>
+      <div class="label">目标方案综合排名</div>
       <div class="value">第 ${me ? me.rank : '-'} 名</div>
-      <div class="sub">共 ${result.length} 家投标</div>
+      <div class="sub">共 ${result.length} 个报价样本</div>
     </div>
     <div class="summary-card">
-      <div class="label">我方综合得分</div>
+      <div class="label">目标方案综合得分</div>
       <div class="value">${me ? me.total.toFixed(4) : '-'}</div>
       <div class="sub">满分100分</div>
     </div>
     <div class="summary-card">
-      <div class="label">我方价格得分</div>
+      <div class="label">目标方案价格得分</div>
       <div class="value">${me ? fmtPriceScore(me.priceScore, config.priceStrategy) : '-'}</div>
       <div class="sub">满分${config.priceFull}分</div>
     </div>
     ${me && me.benchmark ? `<div class="summary-card">
-      <div class="label">评标基准价</div>
+      <div class="label">评分基准价</div>
       <div class="value">¥${fmtBenchmark(me.benchmark, config.priceStrategy)}</div>
       <div class="sub">偏差 ${me.deviation ?? '-'}%${me.validBidCount != null ? `；有效${me.validBidCount}家，去两端各${me.trimCount}家` : ''}</div>
     </div>` : ''}
@@ -459,7 +457,7 @@ function renderResult() {
   // 明细表格
   const theadHtml = `
     <tr>
-      <th>排名</th><th>投标方</th><th>报价（元）</th>
+      <th>排名</th><th>报价样本</th><th>报价（元）</th>
       <th>与基准价偏差</th>
       <th>价格得分<br><small>（满分${config.priceFull}）</small></th>
       <th>商务得分<br><small>（满分100）</small></th>
@@ -470,7 +468,7 @@ function renderResult() {
   const tbodyHtml = result.map(b => `
     <tr class="${b.isMe ? 'my-row' : ''} ${b.rank === 1 ? 'rank-1' : ''}">
       <td><strong>${b.rank}</strong></td>
-      <td>${b.name}${b.isMe ? ' <span class="badge badge-yellow">我方</span>' : ''}</td>
+      <td>${b.name}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
       <td>${fmt(b.price)}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
       <td>${fmtPriceScore(b.priceScore, config.priceStrategy)}</td>
@@ -498,7 +496,7 @@ function renderPredictTable() {
     const tr = document.createElement('tr');
     if (b.isMe) tr.classList.add('my-row');
     tr.innerHTML = `
-      <td>${b.isMe ? '<span class="badge badge-yellow">我方</span> ' : ''}${b.name}</td>
+      <td>${b.isMe ? '<span class="badge badge-yellow">目标</span> ' : ''}${b.name}</td>
       <td><input type="number" class="predict-price-input" data-id="${b.id}"
           value="${b.price > 0 ? b.price : ''}" placeholder="输入预测报价"
           oninput="updateBidderPriceById('${b.id}', +this.value)"
@@ -517,7 +515,6 @@ function calcPredictResult() {
   });
   State.predictPrices = {};
   renderBidderTable();
-  renderPartnerStrategyInputs();
   saveState();
 
   const config = buildConfig();
@@ -542,12 +539,12 @@ function calcPredictResult() {
   const benchmark = ranked.find(b => b.benchmark)?.benchmark;
   const benchmarkHtml = benchmark
     ? `<p style="font-size:12px;color:#666;margin-bottom:8px;">
-        评标基准价：¥${fmtBenchmark(benchmark, strategy)}　|　价格策略：${Scoring.strategyNames[strategy]}
+        评分基准价：¥${fmtBenchmark(benchmark, strategy)}　|　价格方法：${Scoring.strategyNames[strategy]}
        </p>`
     : `<p style="font-size:12px;color:#666;margin-bottom:8px;">价格策略：${Scoring.strategyNames[strategy]}</p>`;
 
   const theadHtml = `<tr>
-    <th>价格排名</th><th>投标方</th><th>预测报价（元）</th>
+    <th>价格排名</th><th>报价样本</th><th>假设报价（元）</th>
     <th>与基准价偏差</th>
     <th>价格得分（满分${config.priceFull}）</th>
   </tr>`;
@@ -555,7 +552,7 @@ function calcPredictResult() {
   const tbodyHtml = ranked.map(b => `
     <tr class="${b.isMe ? 'my-row' : ''} ${b.priceRank === 1 ? 'rank-1' : ''}">
       <td><strong>${b.priceRank}</strong></td>
-      <td>${b.name}${b.isMe ? ' <span class="badge badge-yellow">我方</span>' : ''}</td>
+      <td>${b.name}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
       <td>${b.price > 0 ? '¥ ' + fmt(b.price) : '<span style="color:#bbb;">未填</span>'}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
       <td><strong>${fmtPriceScore(b.priceScore, strategy)}</strong></td>
@@ -574,9 +571,24 @@ function calcPredictResult() {
 // ========================
 // 优化面板
 // ========================
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+}
+
+function sampleOptimizationCandidates(candidates, best, maxRows = 25) {
+  if (candidates.length <= maxRows) return candidates;
+  const stride = Math.ceil(candidates.length / maxRows);
+  const sampled = candidates.filter((candidate, index) => index % stride === 0);
+  const last = candidates[candidates.length - 1];
+  if (!sampled.includes(last)) sampled.push(last);
+  if (!sampled.includes(best)) sampled.push(best);
+  return sampled.sort((left, right) => left.price - right.price);
+}
+
 function renderOptimize() {
   renderPredictTable();
-  renderPartnerStrategyInputs();
 
   const config = buildConfig();
   if (!validateConfig(config)) return;
@@ -584,305 +596,100 @@ function renderOptimize() {
   const myBidder = State.bidders.find(b => b.isMe);
   if (!myBidder) return;
 
-  // 默认搜索区间：基于其他投标方报价
   const others = State.bidders.filter(b => !b.isMe && b.price > 0);
-  let searchMin, searchMax;
-
-  if (others.length > 0) {
-    const prices = others.map(b => b.price);
-    const minP = Math.min(...prices);
-    const maxP = Math.max(...prices);
-    searchMin = gi('opt-min').value ? +gi('opt-min').value : Math.round(minP * 0.85);
-    searchMax = gi('opt-max').value ? +gi('opt-max').value : Math.round(maxP * 1.1);
-  } else {
-    searchMin = gi('opt-min').value ? +gi('opt-min').value : 800000;
-    searchMax = gi('opt-max').value ? +gi('opt-max').value : 1200000;
+  let scenarios;
+  try {
+    scenarios = Scoring.parsePriceScenarios(gi('opt-scenarios').value, others);
+  } catch (error) {
+    gi('optimize-result-box').innerHTML = `<p class="note" style="color:#dc2626;">${escapeHtml(error.message)}</p>`;
+    gi('sensitivity-tbody').innerHTML = '';
+    return;
   }
-  const step = gi('opt-step').value ? +gi('opt-step').value : Math.round((searchMax - searchMin) / 500);
+
+  const scenarioPrices = scenarios.flatMap(scenario => scenario.bidders.map(bidder => bidder.price));
+  const defaultMin = Math.round(Math.min(...scenarioPrices) * 0.85);
+  const defaultMax = Math.round(Math.max(...scenarioPrices) * 1.1);
+  const searchMin = gi('opt-min').value ? +gi('opt-min').value : defaultMin;
+  const searchMax = gi('opt-max').value ? +gi('opt-max').value : defaultMax;
+  const defaultStep = Math.max(Math.round((searchMax - searchMin) / 500), 1);
+  const step = gi('opt-step').value ? +gi('opt-step').value : defaultStep;
 
   if (!gi('opt-min').value) gi('opt-min').value = searchMin;
   if (!gi('opt-max').value) gi('opt-max').value = searchMax;
-  if (!gi('opt-step').value) gi('opt-step').value = Math.max(step, 100);
+  if (!gi('opt-step').value) gi('opt-step').value = step;
 
-  // 最优报价
-  const otherBidders = State.bidders.filter(b => !b.isMe).map(b => ({ ...b }));
-  const optResult = Scoring.findOptimalPrice(
-    myBidder.id,
-    otherBidders.map(b => ({ ...b, businessScore: b.businessScore, techScore: b.techScore })),
-    { ...config, myBidderId: myBidder.id },
-    { minPrice: searchMin, maxPrice: searchMax, step: Math.max(+gi('opt-step').value || 1000, 100) }
-  );
+  if (!(searchMin > 0) || !(searchMax >= searchMin) || !(step > 0)) {
+    gi('optimize-result-box').innerHTML = '<p class="note" style="color:#dc2626;">请填写有效的最低价、最高价和搜索步长</p>';
+    gi('sensitivity-tbody').innerHTML = '';
+    return;
+  }
+
+  let optimization;
+  try {
+    optimization = Scoring.optimizePriceAcrossScenarios(
+      myBidder.id,
+      scenarios,
+      config,
+      { minPrice: searchMin, maxPrice: searchMax, step }
+    );
+  } catch (error) {
+    gi('optimize-result-box').innerHTML = `<p class="note" style="color:#dc2626;">${escapeHtml(error.message)}</p>`;
+    gi('sensitivity-tbody').innerHTML = '';
+    return;
+  }
+
+  const best = optimization.best;
+  const countsText = optimization.participantCounts.map(count => `${count}家`).join('、');
+  const detailRows = best.details.map(detail => `<tr>
+    <td>${escapeHtml(detail.name)}</td>
+    <td>${detail.participantCount}</td>
+    <td>${detail.benchmark == null ? '—' : '¥ ' + fmtBenchmark(detail.benchmark, config.priceStrategy)}</td>
+    <td><strong>${fmtPriceScore(detail.priceScore, config.priceStrategy)}</strong></td>
+    <td>第${detail.priceRank}名${detail.isTop ? '（并列第一）' : ''}</td>
+    <td>${detail.trimCount == null ? '—' : `最高/最低各${detail.trimCount}家`}</td>
+  </tr>`).join('');
 
   const optHtml = `
     <div class="optimize-result">
-      <h3>最优报价推荐</h3>
+      <h3>多情景最优报价推荐</h3>
       <div class="optimize-grid">
         <div class="optimize-item">
           <div class="oi-label">推荐报价</div>
-          <div class="oi-value">¥ ${fmt(optResult.bestPrice)}</div>
+          <div class="oi-value">¥ ${fmt(best.price)}</div>
         </div>
         <div class="optimize-item">
-          <div class="oi-label">预计综合得分</div>
-          <div class="oi-value">${optResult.bestScore?.toFixed(4) ?? '-'}</div>
+          <div class="oi-label">价格排名第一情景</div>
+          <div class="oi-value">${fmt(best.topRate)}%</div>
         </div>
         <div class="optimize-item">
-          <div class="oi-label">预计排名</div>
-          <div class="oi-value">第 ${optResult.bestRank} 名</div>
+          <div class="oi-label">最低价格分</div>
+          <div class="oi-value">${fmtPriceScore(best.minScore, config.priceStrategy)}</div>
         </div>
         <div class="optimize-item">
-          <div class="oi-label">${optResult.bestRank === 1 ? '策略建议' : '注意'}</div>
-          <div class="oi-value" style="font-size:14px;">${optResult.bestRank === 1 ? '在最高价位保持排名第一' : '当前无法排名第一，建议调整策略'}</div>
+          <div class="oi-label">平均价格分 / 最差排名</div>
+          <div class="oi-value" style="font-size:16px;">${fmtPriceScore(best.avgScore, config.priceStrategy)} / 第${best.worstRank}名</div>
         </div>
       </div>
+      <p style="font-size:12px;opacity:.85;margin-top:10px;">价格规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy] || config.priceStrategy)}；共测算${optimization.scenarioCount}个等权情景，样本数量覆盖：${countsText}。只改变目标报价，其他样本保持输入值不变。</p>
     </div>`;
-  gi('optimize-result-box').innerHTML = optHtml;
+  gi('optimize-result-box').innerHTML = `${optHtml}
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">推荐报价在各情景中的结果</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>情景</th><th>样本数</th><th>基准价</th><th>目标价格分</th><th>价格排名</th><th>去除规则</th></tr></thead>
+        <tbody>${detailRows}</tbody>
+      </table></div>
+    </div>`;
 
-  // 敏感性分析表格
-  const sensitData = Scoring.sensitivityAnalysis(
-    myBidder.id,
-    otherBidders.map(b => ({ ...b, businessScore: b.businessScore, techScore: b.techScore })),
-    { ...config, myBidderId: myBidder.id },
-    { minPrice: searchMin, maxPrice: searchMax },
-    25
-  );
-
-  const maxTotal = Math.max(...sensitData.map(r => r.total));
-  const sensitRows = sensitData.map(r => {
-    const barWidth = Math.round(r.total / maxTotal * 120);
-    const rankColor = r.rank === 1 ? '#16a34a' : r.rank === 2 ? '#2e6da4' : '#dc2626';
-    return `<tr>
-      <td>¥ ${fmt(r.price)}</td>
-      <td>${fmtPriceScore(r.priceScore, config.priceStrategy)}</td>
-      <td>
-        <span style="display:inline-block;width:${barWidth}px;height:12px;background:${rankColor};border-radius:2px;vertical-align:middle;margin-right:4px;"></span>
-        ${r.total.toFixed(4)}
-      </td>
-      <td><span class="badge" style="background:${r.rank===1?'#dcfce7':r.rank===2?'#dbeafe':'#fee2e2'};color:${rankColor};">第${r.rank}名</span></td>
-    </tr>`;
-  }).join('');
+  const sensitRows = sampleOptimizationCandidates(optimization.candidates, best).map(candidate => `
+    <tr class="${candidate === best ? 'my-row rank-1' : ''}">
+      <td>¥ ${fmt(candidate.price)}</td>
+      <td>${fmt(candidate.topRate)}%</td>
+      <td>${fmtPriceScore(candidate.minScore, config.priceStrategy)} / ${fmtPriceScore(candidate.avgScore, config.priceStrategy)}</td>
+      <td>第${candidate.worstRank}名</td>
+    </tr>`).join('');
 
   gi('sensitivity-tbody').innerHTML = sensitRows;
-}
-
-// ========================
-// 配合方报价策略
-// ========================
-function renderPartnerStrategyInputs() {
-  const container = gi('ps-competitor-inputs');
-  if (!container) return;
-
-  const competitors = State.bidders.filter(b => !b.isMe);
-  if (competitors.length === 0) {
-    container.innerHTML = '<p class="note">请先在"投标方信息"中添加竞争方</p>';
-    return;
-  }
-
-  // 自动带入已有报价
-  const myBidder = State.bidders.find(b => b.isMe);
-  const myPriceEl = gi('ps-my-price');
-  if (myPriceEl && !myPriceEl.value) {
-    const myPrice = myBidder?.price || '';
-    if (myPrice > 0) myPriceEl.value = myPrice;
-  }
-
-  let html = '<div style="margin-bottom:6px;font-size:13px;color:#555;font-weight:500;">已知竞争方报价</div><div class="form-row">';
-  competitors.forEach(b => {
-    const savedPrice = b.price > 0 ? b.price : '';
-    html += `
-      <div class="form-group">
-        <label>${b.name}</label>
-        <input type="number" class="ps-comp-price" data-id="${b.id}" value="${savedPrice}"
-          placeholder="输入竞争方报价"
-          style="width:140px;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;">
-      </div>`;
-  });
-  html += '</div>';
-  container.innerHTML = html;
-}
-
-function recommendPartnerPrices(myPrice, competitorPrices, numPartners, config) {
-  const { priceStrategy: strategy, strategyParams: params, priceFull } = config;
-  const allKnown = [myPrice, ...competitorPrices];
-  const maxKnown = Math.max(...allKnown);
-  const sumComp = competitorPrices.reduce((a, b) => a + b, 0);
-  const n = 1 + competitorPrices.length + numPartners;
-  let partnerPrices = [];
-  let explanation = '';
-
-  if (strategy === 'lowestPrice') {
-    for (let i = 0; i < numPartners; i++)
-      partnerPrices.push(Math.round(maxKnown * (1.06 + i * 0.04)));
-    explanation = '最低价法下报价最低者得满分。配合方须高于我方报价，建议各自拉开梯度，避免相同报价引发质疑。';
-
-  } else if (strategy === 'averagePrice') {
-    const baseScore = params.avgBaseScore ?? 80;
-    const lowAdd = params.avgLowAdd ?? 1;
-    const maxScore = params.avgMaxScore ?? priceFull;
-    const requiredBelowPct = lowAdd > 0 ? Math.max(0, (maxScore - baseScore) / lowAdd) : 0;
-    const targetRatio = Math.max(0.01, 1 - requiredBelowPct / 100);
-    // 目标均价 = 我方报价 / 目标报价占均价比例，取刚好达到最高分的最低均价，避免无意义拉高配合方报价。
-    const targetAvg = myPrice / targetRatio;
-    const targetSum = targetAvg * n - myPrice - sumComp;
-    if (targetSum > myPrice * numPartners * 0.3) {
-      const base = targetSum / numPartners;
-      for (let i = 0; i < numPartners; i++)
-        partnerPrices.push(Math.round(base * (1 + i * 0.01)));
-      explanation = `平均价法下，平均价为${baseScore}分；按当前参数，我方报价需约低于平均价${roundText(requiredBelowPct)}%才能达到最高分${maxScore}分。配合方按上述报价可把预测均价抬到该有利区间。`;
-    } else {
-      for (let i = 0; i < numPartners; i++)
-        partnerPrices.push(Math.round(maxKnown * (1.06 + i * 0.04)));
-      explanation = `平均价法下，现有竞争方报价已足以把均价抬高到有利区间；配合方建议高于已知报价并拉开梯度，避免拉低均价影响我方达到${maxScore}分。`;
-    }
-
-  } else if (strategy === 'compositePrice') {
-    // 目标：复合基准价 ≈ 我方报价（偏差为0得满分）
-    // Σpartners = myPrice × (n-1) - Σcomp
-    const targetSum = myPrice * (n - 1) - sumComp;
-    if (targetSum > myPrice * numPartners * 0.3) {
-      const base = targetSum / numPartners;
-      for (let i = 0; i < numPartners; i++)
-        partnerPrices.push(Math.round(base * (1 + i * 0.01))); // 微小错开
-      explanation = `${Scoring.strategyNames[strategy]}下，评标基准价为均值。配合方按上述报价可使均价贴近我方报价，偏差趋近于0，我方获得最高价格得分。`;
-    } else {
-      // 竞争方报价已偏低，配合方需报高价拉升均值
-      for (let i = 0; i < numPartners; i++)
-        partnerPrices.push(Math.round(myPrice * (1.25 + i * 0.06)));
-      explanation = `${Scoring.strategyNames[strategy]}下，现有竞争方报价偏低导致均值低于我方。配合方报高价可拉升基准价，减小我方偏差，提升价格得分。`;
-    }
-
-  } else if (strategy === 'trimmedAverage') {
-    const trimCount = params.trimCount || 1;
-    if (numPartners <= trimCount) {
-      // 全部配合方报极高价，被剔除，不影响基准价
-      for (let i = 0; i < numPartners; i++)
-        partnerPrices.push(Math.round(maxKnown * (1.35 + i * 0.08)));
-      explanation = `去高去低平均价法下，配合方全部报极高价（超过去除阈值），系统自动剔除，不影响基准价计算，同时完成投标人数要求。`;
-    } else {
-      // 部分被剔除，其余调节均值
-      for (let i = 0; i < trimCount; i++)
-        partnerPrices.push(Math.round(maxKnown * (1.35 + i * 0.08)));
-      const remain = numPartners - trimCount;
-      const nAfterTrim = 1 + competitorPrices.length + remain;
-      const targetSumRemain = myPrice * (nAfterTrim - 1) - sumComp;
-      const base = targetSumRemain > 0 ? targetSumRemain / remain : myPrice * 1.15;
-      for (let i = 0; i < remain; i++)
-        partnerPrices.push(Math.round(base * (1 + i * 0.01)));
-      explanation = `去高去低平均价法下，${trimCount}家配合方报极高价被剔除，其余${remain}家通过精准报价将剔除后的均值调节至接近我方报价。`;
-    }
-
-  } else if (strategy === 'fixedBenchmark' || strategy === 'intervalScore') {
-    // 基准价固定，配合方无法影响，只需自身得分低于我方即可
-    const benchmark = params.benchmark || myPrice;
-    for (let i = 0; i < numPartners; i++)
-      partnerPrices.push(Math.round(benchmark * (1.18 + i * 0.06)));
-    explanation = `固定基准价/区间得分法下，基准价由招标方设定，配合方报价不影响基准价。建议配合方报价明显偏离基准价，自身价格得分低于我方即可。`;
-
-  } else {
-    for (let i = 0; i < numPartners; i++)
-      partnerPrices.push(Math.round(myPrice * (1.08 + i * 0.04)));
-    explanation = '建议配合方报价高于我方，保持合理间距。';
-  }
-
-  return { partnerPrices, explanation };
-}
-
-function calcPartnerStrategy() {
-  const myPrice = +gi('ps-my-price').value;
-  if (!myPrice) {
-    gi('ps-result-box').innerHTML = '<p class="note" style="color:#dc2626;">请输入我方确定报价</p>';
-    return;
-  }
-
-  const competitorPrices = [];
-  const competitorNames = [];
-  document.querySelectorAll('.ps-comp-price').forEach(input => {
-    const price = +input.value;
-    if (price > 0) {
-      competitorPrices.push(price);
-      const bidder = State.bidders.find(b => b.id === input.dataset.id);
-      competitorNames.push(bidder?.name || '竞争方');
-    }
-  });
-
-  if (competitorPrices.length === 0) {
-    gi('ps-result-box').innerHTML = '<p class="note" style="color:#dc2626;">请至少输入一家竞争方的报价</p>';
-    return;
-  }
-
-  const numPartners = +gi('ps-partner-count').value || 2;
-  const config = buildConfig();
-  const { partnerPrices, explanation } = recommendPartnerPrices(myPrice, competitorPrices, numPartners, config);
-
-  // 构建虚拟投标列表，仅做价格得分计算
-  const allBidders = [
-    { id: 'ps-me', name: '我方', price: myPrice, isMe: true, isPartner: false },
-    ...competitorPrices.map((p, i) => ({ id: 'ps-c' + i, name: competitorNames[i], price: p, isMe: false, isPartner: false })),
-    ...partnerPrices.map((p, i) => ({ id: 'ps-p' + i, name: `配合方${i + 1}`, price: p, isMe: false, isPartner: true })),
-  ];
-
-  const strategy = config.priceStrategy;
-  const priceResult = (Scoring.PriceStrategies[strategy] || Scoring.PriceStrategies.lowestPrice)(
-    allBidders, config.priceFull, config.strategyParams
-  );
-  const sorted = [...priceResult].sort((a, b) => b.priceScore - a.priceScore);
-  sorted.forEach((b, i) => { b.priceRank = i + 1; });
-  const ranked = priceResult.map(b => sorted.find(s => s.id === b.id));
-
-  const benchmark = ranked.find(b => b.benchmark)?.benchmark;
-  const me = ranked.find(b => b.isMe);
-
-  const recsHtml = partnerPrices.map((p, i) => `
-    <div class="optimize-item">
-      <div class="oi-label">配合方${i + 1} 建议报价</div>
-      <div class="oi-value">¥ ${fmt(p)}</div>
-    </div>`).join('');
-
-  const theadHtml = `<tr>
-    <th>价格排名</th><th>角色</th><th>报价（元）</th>
-    <th>与基准价偏差</th><th>价格得分（满分${config.priceFull}）</th>
-  </tr>`;
-
-  const tbodyHtml = ranked.map(b => {
-    const roleLabel = b.isMe ? '我方' : b.isPartner ? '配合方' : '竞争方';
-    const badgeClass = b.isMe ? 'badge-yellow' : b.isPartner ? 'badge-blue' : '';
-    const rowClass = (b.isMe ? 'my-row' : b.isPartner ? 'partner-row' : '') + (b.priceRank === 1 ? ' rank-1' : '');
-    return `<tr class="${rowClass}">
-      <td><strong>${b.priceRank}</strong></td>
-      <td><span class="badge ${badgeClass}">${roleLabel}</span> ${b.name}</td>
-      <td>¥ ${fmt(b.price)}</td>
-      <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
-      <td><strong>${fmtPriceScore(b.priceScore, strategy)}</strong></td>
-    </tr>`;
-  }).join('');
-
-  gi('ps-result-box').innerHTML = `
-    <div class="optimize-result">
-      <h3>策略说明</h3>
-      <p style="font-size:13px;color:#555;margin-bottom:12px;">${explanation}</p>
-      <div class="optimize-grid">
-        <div class="optimize-item">
-          <div class="oi-label">我方报价</div>
-          <div class="oi-value">¥ ${fmt(myPrice)}</div>
-        </div>
-        ${recsHtml}
-        ${benchmark ? `<div class="optimize-item">
-          <div class="oi-label">预测基准价</div>
-          <div class="oi-value">¥ ${fmtBenchmark(benchmark, strategy)}</div>
-        </div>` : ''}
-        <div class="optimize-item">
-          <div class="oi-label">我方价格得分</div>
-          <div class="oi-value">${me ? fmtPriceScore(me.priceScore, strategy) : '-'} 分</div>
-        </div>
-        <div class="optimize-item">
-          <div class="oi-label">我方价格排名</div>
-          <div class="oi-value">第 ${me?.priceRank ?? '-'} 名</div>
-        </div>
-      </div>
-    </div>
-    <p style="font-size:12px;color:#666;margin:8px 0 6px;">价格策略：${Scoring.strategyNames[strategy]}${benchmark ? '　|　评标基准价：¥' + fmtBenchmark(benchmark, strategy) : ''}</p>
-    <div class="table-wrap">
-      <table><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>
-    </div>`;
 }
 
 // ========================
@@ -898,7 +705,7 @@ function initScenarioPanel() {
     }
   });
 
-  // 默认带入当前投标方信息中我方数据
+  // 默认带入当前报价样本中的目标方案数据
   const myBidder = State.bidders.find(b => b.isMe);
   if (myBidder) {
     if (myBidder.price > 0) gi('scenario-my-price').value = myBidder.price;
@@ -913,13 +720,13 @@ function saveScenario() {
   const myTech  = +gi('scenario-my-tech').value;
 
   if (!myPrice) {
-    alert('请填写我方报价');
+    alert('请填写目标报价');
     return;
   }
 
   const config = buildConfig();
   const bidders = [
-    { id: 'my', name: '我方', price: myPrice, businessScore: myBiz, techScore: myTech, isMe: true },
+    { id: 'my', name: '目标方案', price: myPrice, businessScore: myBiz, techScore: myTech, isMe: true },
     ...State.bidders.filter(b => !b.isMe).map(b => ({ ...b })),
   ];
   const result = Scoring.evaluate(bidders, config);
@@ -969,7 +776,7 @@ function renderScenarios() {
   container.innerHTML = `
     <table>
       <thead><tr>
-        <th>方案名称</th><th>价格策略</th><th>我方报价</th>
+        <th>方案名称</th><th>价格方法</th><th>目标报价</th>
         <th>商务得分</th><th>技术得分</th><th>价格得分</th>
         <th>综合得分</th><th>排名</th><th>保存时间</th><th>操作</th>
       </tr></thead>
@@ -1022,10 +829,6 @@ function fmtPriceScore(score, strategy = State.config.priceStrategy) {
     ? Number(score).toFixed(2)
     : score;
 }
-function roundText(num) {
-  return Number(num).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
-}
-
 // ========================
 // 快速导入预设
 // ========================
@@ -1035,25 +838,25 @@ function loadPreset(name) {
       businessWeight: 20, priceWeight: 40, techWeight: 40,
       priceStrategy: 'averagePrice',
       strategyParams: { avgBaseScore: 80, avgLowAdd: 1, avgHighDeduct: 1, avgMaxScore: 100, avgMinScore: 0 },
-      label: '政府采购（商务20/价格40/技术40）'
+      label: '通用评分模板（商务20/价格40/技术40）'
     },
     infra: {
       businessWeight: 10, priceWeight: 60, techWeight: 30,
       priceStrategy: 'compositePrice',
       strategyParams: { weightLow: 0.5, weightAvg: 0.5, deductHigh: 1, deductLow: 0.5 },
-      label: '基础设施工程（商务10/价格60/技术30）'
+      label: '价格权重较高模板（商务10/价格60/技术30）'
     },
     tech: {
       businessWeight: 15, priceWeight: 30, techWeight: 55,
       priceStrategy: 'lowestPrice',
       strategyParams: {},
-      label: '信息技术项目（商务15/价格30/技术55）'
+      label: '技术权重较高模板（商务15/价格30/技术55）'
     },
     lowest: {
       businessWeight: 20, priceWeight: 50, techWeight: 30,
       priceStrategy: 'lowestPrice',
       strategyParams: {},
-      label: '最低价竞标型（商务20/价格50/技术30）'
+      label: '价格优先模板（商务20/价格50/技术30）'
     },
   };
 
@@ -1092,5 +895,4 @@ document.addEventListener('DOMContentLoaded', () => {
   gi('btn-calc-result').addEventListener('click', renderResult);
   gi('btn-search-optimal').addEventListener('click', renderOptimize);
   gi('btn-predict-calc').addEventListener('click', calcPredictResult);
-  gi('btn-partner-strategy').addEventListener('click', calcPartnerStrategy);
 });

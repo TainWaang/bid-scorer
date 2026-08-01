@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>投标评分计算器</title>
+  <title>报价评分情景模拟器</title>
   <style>
     :root {
       --blue: #1d4ed8;
@@ -126,7 +126,7 @@
       display: block; font-size: 12px; color: var(--text2);
       margin-bottom: 5px; font-weight: 500;
     }
-    .field input, .field select {
+    .field input, .field select, .field textarea {
       width: 100%; padding: 11px 13px;
       border: 1.5px solid var(--border);
       border-radius: 10px; font-size: 15px;
@@ -135,7 +135,8 @@
       transition: border-color 0.2s, background 0.2s;
       -webkit-appearance: none;
     }
-    .field input:focus, .field select:focus {
+    .field textarea { resize: vertical; line-height: 1.6; }
+    .field input:focus, .field select:focus, .field textarea:focus {
       outline: none; border-color: var(--blue);
       background: #fff;
       box-shadow: 0 0 0 3px rgba(29,78,216,0.08);
@@ -279,8 +280,8 @@
     .sens-bar.rank2 { background: var(--blue-light); }
     .sens-bar.rank3 { background: var(--orange); }
     .sens-bar.rankX { background: var(--red); }
-    .sens-score { font-size: 13px; font-weight: 600; width: 58px; text-align: right; flex-shrink: 0; }
-    .sens-rank { font-size: 12px; width: 36px; text-align: right; flex-shrink: 0; color: var(--text2); }
+    .sens-score { font-size: 12px; font-weight: 600; width: 76px; text-align: right; flex-shrink: 0; }
+    .sens-rank { font-size: 12px; width: 44px; text-align: right; flex-shrink: 0; color: var(--text2); }
 
     /* ── Scenario ── */
     .scenario-card {
@@ -347,8 +348,8 @@
 <!-- Header -->
 <div class="header">
   <div>
-    <div class="header-title">投标评分计算器</div>
-    <div class="header-sub">综合评分策略优化</div>
+    <div class="header-title">报价评分情景模拟器</div>
+    <div class="header-sub">独立数据 · 公开公式 · 情景分析</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <a href="index.html" style="color:rgba(255,255,255,0.75);font-size:12px;text-decoration:none;">桌面版</a>
@@ -400,7 +401,7 @@
             <option value="lowestPrice">最低价法</option>
             <option value="averagePrice" selected>平均价法</option>
             <option value="compositePrice">复合基准价法</option>
-            <option value="fixedBenchmark">固定基准价法（标底）</option>
+            <option value="fixedBenchmark">固定基准价法</option>
             <option value="trimmedAverage">去高去低平均价法</option>
             <option value="tieredTrimmedBenchmark">分档去高去低×系数法</option>
             <option value="intervalScore">区间得分法</option>
@@ -412,10 +413,10 @@
       <div class="card">
         <div class="card-head">快速预设</div>
         <div class="preset-chips">
-          <button class="preset-chip" onclick="loadPreset('gov')">政府采购</button>
-          <button class="preset-chip" onclick="loadPreset('infra')">基础设施</button>
-          <button class="preset-chip" onclick="loadPreset('tech')">信息化项目</button>
-          <button class="preset-chip" onclick="loadPreset('lowest')">最低价竞标</button>
+          <button class="preset-chip" onclick="loadPreset('gov')">通用模板</button>
+          <button class="preset-chip" onclick="loadPreset('infra')">价格权重较高</button>
+          <button class="preset-chip" onclick="loadPreset('tech')">技术权重较高</button>
+          <button class="preset-chip" onclick="loadPreset('lowest')">价格优先</button>
         </div>
       </div>
 
@@ -425,13 +426,13 @@
 
     </div>
 
-    <!-- ── Page 2: 投标方 ── -->
+    <!-- ── Page 2: 报价样本 ── -->
     <div class="page" id="page-1">
 
       <div id="bidder-list"></div>
 
       <button class="btn btn-outline" onclick="addBidder()" style="margin-bottom:12px;">
-        <span>+</span><span>添加竞争方</span>
+        <span>+</span><span>添加其他样本</span>
       </button>
 
       <button class="btn btn-blue" onclick="quickCalc()">
@@ -441,9 +442,9 @@
       <div class="card" style="margin-top:12px;">
         <div class="card-head">填写说明</div>
         <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:16px;">
-          <li>商务分/技术分：预估评委打分或参考历史</li>
-          <li>竞争方报价：据市场调研或情报填写</li>
-          <li>我方报价可留空，在"优化"页面自动求解</li>
+          <li>商务分/技术分：填写独立假设值</li>
+          <li>其他报价：填写用户自行设定的情景样本</li>
+          <li>目标报价可留空，在“优化”页面自动求解</li>
         </ul>
       </div>
 
@@ -463,7 +464,11 @@
     <div class="page" id="page-3">
 
       <div class="card">
-        <div class="card-head">搜索区间</div>
+        <div class="card-head">多情景最优报价</div>
+        <div class="field">
+          <label>其他报价样本情景（每行一个，不含目标报价）</label>
+          <textarea id="m-opt-scenarios" rows="5" placeholder="总5家: 1010000, 1030000, 1070000, 1090000&#10;总8家: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11家: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
+        </div>
         <div class="field-row">
           <div class="field">
             <label>最低价（元）</label>
@@ -481,7 +486,7 @@
         <button class="btn btn-green" onclick="runOptimize()" style="margin-top:4px;">
           <span>搜索最优报价</span>
         </button>
-        <p class="note" style="margin-top:8px;">找出使我方综合排名第一的最高报价（利润最大化）</p>
+        <p class="note" style="margin-top:8px;">可添加任意数量、任意样本数的情景。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，自动切换 ≤5个、6–10个、≥11个规则；报价不要使用千位分隔符。各情景等权，系统只改变目标报价，先最大化价格得分并列第一比例，再比较最低分、平均分，同分时选择较高报价。留空则使用当前报价样本列表。</p>
       </div>
 
       <div id="opt-result-box"></div>
@@ -505,7 +510,7 @@
         <button class="btn btn-green" onclick="saveScenario()">
           <span>保存当前方案</span>
         </button>
-        <p class="note" style="margin-top:6px;">基于当前填写的我方报价和配置保存</p>
+        <p class="note" style="margin-top:6px;">基于当前填写的目标报价和配置保存</p>
       </div>
 
       <div id="scenario-list">
@@ -521,7 +526,8 @@
           <div><b>平均价法：</b>均价为80分，报价低于均价会加分，高于均价会扣分</div>
           <div><b>最低价法：</b>价格优先，需兼顾利润底线</div>
           <div><b>复合基准价：</b>最优点在均价与最低价之间</div>
-          <div><b>配合单位策略：</b>通过配合方报价影响基准价走向，为我方创造有利区间</div>
+          <div><b>多情景优化：</b>按不同样本数量和假设报价，比较目标报价的稳健性</div>
+          <div><b>用途边界：</b>只计算目标报价，其他样本保持用户输入值不变</div>
         </div>
       </div>
 
@@ -537,7 +543,7 @@
   </button>
   <button class="nav-item" onclick="switchPage(1,this)">
     <span class="nav-icon">👥</span>
-    <span>投标方</span>
+    <span>样本</span>
     <span class="nav-badge" id="bidder-badge">3</span>
   </button>
   <button class="nav-item" onclick="switchPage(2,this)">
@@ -567,9 +573,9 @@ const S = {
     strategyParams: { deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1, tierHighThreshold:10, tierMidThreshold:5, tierHighTrim:2, tierMidTrim:1, benchmarkFactor:0.95, benchmarkDecimals:6, tierBaseScore:35, tierHighDeduct:0.5, tierLowAdd:0.5, tierMinScore:30, tierMaxScore:40 },
   },
   bidders: [
-    { id:'my', name:'我方',    price:0, businessScore:80, techScore:85, isMe:true  },
-    { id:'b1', name:'竞争方A', price:0, businessScore:78, techScore:82, isMe:false },
-    { id:'b2', name:'竞争方B', price:0, businessScore:76, techScore:80, isMe:false },
+    { id:'my', name:'目标方案', price:0, businessScore:80, techScore:85, isMe:true  },
+    { id:'b1', name:'其他样本A', price:0, businessScore:78, techScore:82, isMe:false },
+    { id:'b2', name:'其他样本B', price:0, businessScore:76, techScore:80, isMe:false },
   ],
   scenarios: [],
 };
@@ -634,9 +640,9 @@ function renderStrategyParams() {
     lowestPrice:    '最低报价得满分，其他按比例扣分，无需额外参数。',
     averagePrice:   '基准价 = 所有报价算术平均值；平均价得分、加扣分斜率和上下限均可配置。',
     compositePrice: '基准价 = 最低价×权重A + 平均价×权重B（之和=1）。',
-    fixedBenchmark: '基准价由招标方预先设定（标底价），报价越接近越高分。',
+    fixedBenchmark: '基准价由用户按适用规则预先设置，报价越接近越高分。',
     trimmedAverage: '去掉最高价和最低价各若干个后再取平均作为基准价。',
-    tieredTrimmedBenchmark: '按有效投标人数自动去高去低，均值乘系数后计算基准价；低价加分、高价扣分。仅报价>0计为有效，无效投标请删除或留空。',
+    tieredTrimmedBenchmark: '按有效报价样本数自动去高去低，均值乘系数后计算基准价；低价加分、高价扣分。仅报价>0计为有效，无效样本请删除或留空。',
     intervalScore:  '报价在基准价附近区间内得满分，超出区间则按比例扣分。',
   };
 
@@ -666,7 +672,7 @@ function renderStrategyParams() {
       <div class="field"><label>平均价权重</label><input type="number" data-key="weightAvg" value="${p.weightAvg}" step="0.05" min="0" max="1" inputmode="decimal"></div>
     </div>${fieldDeduct}`,
     fixedBenchmark: `<div class="field" style="margin-top:10px;">
-      <label>标底基准价（元）</label>
+      <label>固定基准价（元）</label>
       <input type="number" data-key="benchmark" value="${p.benchmark}" step="10000" inputmode="numeric">
     </div>${fieldDeduct}`,
     trimmedAverage: `<div class="field" style="margin-top:10px;">
@@ -729,15 +735,15 @@ function renderBidders() {
     div.innerHTML = `
       <div class="bidder-head">
         <div class="bidder-name-wrap">
-          <span class="badge ${b.isMe?'badge-me':'badge-comp'}">${b.isMe?'我方':'竞争方'}</span>
+          <span class="badge ${b.isMe?'badge-me':'badge-comp'}">${b.isMe?'目标':'样本'}</span>
           <input class="bidder-name-input" type="text" value="${b.name}"
             onchange="S.bidders[${idx}].name=this.value">
         </div>
         ${b.isMe ? '' : `<button class="btn-danger-sm" onclick="removeBidder(${idx})">删除</button>`}
       </div>
       <div class="field">
-        <label>报价（元）${b.isMe?'<span style="color:#1d4ed8;font-weight:600;"> 我方</span>':''}</label>
-        <input type="number" value="${b.price||''}" placeholder="${b.isMe?'填写我方报价':'填写竞争方预估报价'}"
+        <label>报价（元）${b.isMe?'<span style="color:#1d4ed8;font-weight:600;"> 目标</span>':''}</label>
+        <input type="number" value="${b.price||''}" placeholder="${b.isMe?'填写目标报价':'填写其他假设报价'}"
           class="${b.isMe?'highlight':''}" inputmode="numeric" step="1000"
           oninput="S.bidders[${idx}].price=+this.value"
           onchange="S.bidders[${idx}].price=+this.value">
@@ -761,7 +767,7 @@ function renderBidders() {
 
 function addBidder() {
   const n = S.bidders.filter(b=>!b.isMe).length + 1;
-  S.bidders.push({ id:'b'+Date.now(), name:'竞争方'+('ABCDEFGH'[n-1]||n), price:0, businessScore:75, techScore:78, isMe:false });
+  S.bidders.push({ id:'b'+Date.now(), name:'其他样本'+('ABCDEFGH'[n-1]||n), price:0, businessScore:75, techScore:78, isMe:false });
   renderBidders();
 }
 
@@ -785,9 +791,9 @@ function renderResult() {
   if (me) {
     const rankLabel = me.rank===1?'第一名 🏆':me.rank===2?'第二名':'第'+me.rank+'名';
     html += `<div class="my-summary">
-      <div class="my-summary-title">我方综合评分结果</div>
+      <div class="my-summary-title">目标方案综合评分结果</div>
       <div class="my-summary-rank">${rankLabel}</div>
-      <div class="my-summary-sub">综合得分 ${me.total.toFixed(4)} 分 · 共${result.length}家投标</div>
+      <div class="my-summary-sub">综合得分 ${me.total.toFixed(4)} 分 · 共${result.length}个报价样本</div>
       <div class="my-summary-scores">
         <div class="my-score-item"><div class="si-label">商务得分</div><div class="si-val">${me.businessScore}</div></div>
         <div class="my-score-item"><div class="si-label">价格得分</div><div class="si-val">${fmtPriceScore(me.priceScore, config.priceStrategy)}</div></div>
@@ -796,7 +802,7 @@ function renderResult() {
     </div>`;
     if (me.benchmark) {
       html += `<div class="benchmark-tip">
-        评标基准价：¥ ${fmtBenchmark(me.benchmark, config.priceStrategy)}&emsp;我方偏差：${me.deviation??'-'}%
+        评分基准价：¥ ${fmtBenchmark(me.benchmark, config.priceStrategy)}&emsp;目标偏差：${me.deviation??'-'}%
         ${me.validBidCount != null ? `<br>有效${me.validBidCount}家，去最高和最低各${me.trimCount}家` : ''}
       </div>`;
     }
@@ -807,7 +813,7 @@ function renderResult() {
     const cls = b.rank===1?'first':b.rank===2?'second':'other';
     html += `<div class="rank-card ${cls}">
       <div class="rank-num">${b.rank}</div>
-      <div class="rank-name">${b.name}${b.isMe?'（我方）':''}</div>
+      <div class="rank-name">${b.name}${b.isMe?'（目标）':''}</div>
       <div class="rank-total">${b.total.toFixed(4)}</div>
       <div class="rank-meta">
         <div class="rank-meta-item">报价 <span>¥${fmt(b.price)}</span></div>
@@ -828,6 +834,22 @@ function renderResult() {
 }
 
 // ── Optimize ──
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[char]);
+}
+
+function sampleMobileCandidates(candidates,best,maxRows=20) {
+  if (candidates.length<=maxRows) return candidates;
+  const stride = Math.ceil(candidates.length/maxRows);
+  const sampled = candidates.filter((candidate,index)=>index%stride===0);
+  const last = candidates[candidates.length-1];
+  if (!sampled.includes(last)) sampled.push(last);
+  if (!sampled.includes(best)) sampled.push(best);
+  return sampled.sort((left,right)=>left.price-right.price);
+}
+
 function initOptimizeDefaults() {
   if (gi('m-opt-min').value && gi('m-opt-max').value) return;
   const others = S.bidders.filter(b=>!b.isMe && b.price>0);
@@ -841,39 +863,69 @@ function initOptimizeDefaults() {
 
 function runOptimize() {
   const config = buildConfig();
-  const minP = +gi('m-opt-min').value||0;
-  const maxP = +gi('m-opt-max').value||0;
-  const step = Math.max(+gi('m-opt-step').value||1000, 100);
-  if (minP<=0||maxP<=0||maxP<=minP) { alert('请填写有效的搜索区间'); return; }
-
   const myBidder = S.bidders.find(b=>b.isMe);
-  const others   = S.bidders.filter(b=>!b.isMe).map(b=>({...b}));
+  const others = S.bidders.filter(b=>!b.isMe && b.price>0);
+  let scenarios;
+  try {
+    scenarios = Scoring.parsePriceScenarios(gi('m-opt-scenarios').value,others);
+  } catch (error) {
+    gi('opt-result-box').innerHTML = `<div class="card"><p class="note" style="color:var(--red);">${escapeHtml(error.message)}</p></div>`;
+    gi('sens-card').style.display = 'none';
+    return;
+  }
 
-  const opt = Scoring.findOptimalPrice(myBidder.id, others, config, {minPrice:minP,maxPrice:maxP,step});
+  const scenarioPrices = scenarios.flatMap(scenario=>scenario.bidders.map(bidder=>bidder.price));
+  const defaultMin = Math.round(Math.min(...scenarioPrices)*0.85);
+  const defaultMax = Math.round(Math.max(...scenarioPrices)*1.1);
+  const minP = gi('m-opt-min').value ? +gi('m-opt-min').value : defaultMin;
+  const maxP = gi('m-opt-max').value ? +gi('m-opt-max').value : defaultMax;
+  const defaultStep = Math.max(Math.round((maxP-minP)/400),1);
+  const step = gi('m-opt-step').value ? +gi('m-opt-step').value : defaultStep;
+  if (!gi('m-opt-min').value) gi('m-opt-min').value=minP;
+  if (!gi('m-opt-max').value) gi('m-opt-max').value=maxP;
+  if (!gi('m-opt-step').value) gi('m-opt-step').value=step;
+  if (!(minP>0)||!(maxP>=minP)||!(step>0)) { alert('请填写有效的最低价、最高价和搜索步长'); return; }
+
+  let optimization;
+  try {
+    optimization = Scoring.optimizePriceAcrossScenarios(myBidder.id,scenarios,config,{minPrice:minP,maxPrice:maxP,step});
+  } catch (error) {
+    gi('opt-result-box').innerHTML = `<div class="card"><p class="note" style="color:var(--red);">${escapeHtml(error.message)}</p></div>`;
+    gi('sens-card').style.display = 'none';
+    return;
+  }
+  const best = optimization.best;
+  const countsText = optimization.participantCounts.map(count=>`${count}家`).join('、');
+  const detailsHtml = best.details.map(detail=>`<div class="scenario-card ${detail.isTop?'s-first':''}">
+    <div class="sc-head"><div class="sc-name">${escapeHtml(detail.name)} · ${detail.participantCount}家</div><div class="sc-rank ${detail.isTop?'first':''}">第${detail.priceRank}名</div></div>
+    <div class="sc-details">
+      <div class="sc-detail-item"><div class="dl">基准价</div><div class="dv">${detail.benchmark==null?'—':'¥'+fmtBenchmark(detail.benchmark,config.priceStrategy)}</div></div>
+      <div class="sc-detail-item"><div class="dl">目标价格分</div><div class="dv">${fmtPriceScore(detail.priceScore,config.priceStrategy)}</div></div>
+      <div class="sc-detail-item"><div class="dl">去高/去低</div><div class="dv">${detail.trimCount==null?'—':`各${detail.trimCount}家`}</div></div>
+    </div>
+  </div>`).join('');
 
   const box = gi('opt-result-box');
   box.innerHTML = `<div class="opt-result">
-    <div class="opt-result-title">最优报价推荐 —— 使排名第一的最高报价</div>
-    <div class="opt-price">¥ ${fmt(opt.bestPrice)}</div>
+    <div class="opt-result-title">多情景最优报价推荐</div>
+    <div class="opt-price">¥ ${fmt(best.price)}</div>
     <div class="opt-meta">
-      <div class="opt-meta-item"><div class="oml">预计综合得分</div><div class="omv">${opt.bestScore?.toFixed(4)??'-'}</div></div>
-      <div class="opt-meta-item"><div class="oml">预计排名</div><div class="omv">第 ${opt.bestRank} 名</div></div>
-      <div class="opt-meta-item"><div class="oml">${opt.bestRank===1?'✅ 策略':'⚠️ 提示'}</div>
-        <div class="omv" style="font-size:13px;">${opt.bestRank===1?'此价位利润最大':'无法排第一，需调整策略'}</div></div>
+      <div class="opt-meta-item"><div class="oml">价格第一情景</div><div class="omv">${best.topRate}%</div></div>
+      <div class="opt-meta-item"><div class="oml">最低 / 平均价格分</div><div class="omv">${fmtPriceScore(best.minScore,config.priceStrategy)} / ${fmtPriceScore(best.avgScore,config.priceStrategy)}</div></div>
+      <div class="opt-meta-item"><div class="oml">最差价格排名</div><div class="omv">第${best.worstRank}名</div></div>
     </div>
-  </div>`;
+    <div style="font-size:11px;opacity:.8;margin-top:10px;">规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy]||config.priceStrategy)}；${optimization.scenarioCount}个等权情景；样本数量覆盖：${countsText}；只改变目标报价</div>
+  </div>
+  <div class="card"><div class="card-head">推荐价逐情景结果</div>${detailsHtml}</div>`;
 
-  // Sensitivity
-  const sens = Scoring.sensitivityAnalysis(myBidder.id, others, config, {minPrice:minP,maxPrice:maxP}, 20);
-  const maxTotal = Math.max(...sens.map(r=>r.total));
-  const sensHtml = sens.map(r => {
-    const pct = Math.round(r.total/maxTotal*100);
-    const cls = r.rank===1?'rank1':r.rank===2?'rank2':r.rank===3?'rank3':'rankX';
+  const sensHtml = sampleMobileCandidates(optimization.candidates,best).map(candidate => {
+    const pct = Math.max(4,candidate.topRate);
+    const cls = candidate.topRate===100?'rank1':candidate.topRate>=50?'rank2':candidate.topRate>0?'rank3':'rankX';
     return `<div class="sens-row">
-      <div class="sens-price">¥${fmtShort(r.price)}</div>
+      <div class="sens-price">¥${fmtShort(candidate.price)}</div>
       <div class="sens-bar-wrap"><div class="sens-bar ${cls}" style="width:${pct}%"></div></div>
-      <div class="sens-score">${r.total.toFixed(2)}</div>
-      <div class="sens-rank">第${r.rank}名</div>
+      <div class="sens-score">第一${candidate.topRate}%<br><span style="font-size:10px;color:var(--text3);">最低${fmtPriceScore(candidate.minScore,config.priceStrategy)}</span></div>
+      <div class="sens-rank">最差<br>第${candidate.worstRank}名</div>
     </div>`;
   }).join('');
 
@@ -885,7 +937,7 @@ function runOptimize() {
 function saveScenario() {
   const config = buildConfig();
   const myBidder = S.bidders.find(b=>b.isMe);
-  if (!myBidder||!myBidder.price) { alert('请先填写我方报价'); return; }
+  if (!myBidder||!myBidder.price) { alert('请先填写目标报价'); return; }
   const result = Scoring.evaluate(S.bidders.map(b=>({...b})), config);
   const me = result.find(b=>b.isMe);
   const name = gi('m-scenario-name').value || `方案${S.scenarios.length+1}`;
@@ -945,10 +997,10 @@ function removeScenario(idx) {
 // ── Presets ──
 function loadPreset(name) {
   const presets = {
-    gov:    { businessWeight:20, priceWeight:40, techWeight:40, priceStrategy:'averagePrice',    label:'政府采购' },
-    infra:  { businessWeight:10, priceWeight:60, techWeight:30, priceStrategy:'compositePrice',  label:'基础设施' },
-    tech:   { businessWeight:15, priceWeight:30, techWeight:55, priceStrategy:'lowestPrice',     label:'信息化项目' },
-    lowest: { businessWeight:20, priceWeight:50, techWeight:30, priceStrategy:'lowestPrice',     label:'最低价竞标' },
+    gov:    { businessWeight:20, priceWeight:40, techWeight:40, priceStrategy:'averagePrice',    label:'通用评分模板' },
+    infra:  { businessWeight:10, priceWeight:60, techWeight:30, priceStrategy:'compositePrice',  label:'价格权重较高模板' },
+    tech:   { businessWeight:15, priceWeight:30, techWeight:55, priceStrategy:'lowestPrice',     label:'技术权重较高模板' },
+    lowest: { businessWeight:20, priceWeight:50, techWeight:30, priceStrategy:'lowestPrice',     label:'价格优先模板' },
   };
   const p = presets[name]; if (!p) return;
   S.config.businessWeight = p.businessWeight;
