@@ -28,6 +28,17 @@ const State = {
       upperPct:   3,
       deductOut:  1,
       trimCount:  1,
+      tierHighThreshold: 10,
+      tierMidThreshold: 5,
+      tierHighTrim: 2,
+      tierMidTrim: 1,
+      benchmarkFactor: 0.95,
+      benchmarkDecimals: 6,
+      tierBaseScore: 35,
+      tierHighDeduct: 0.5,
+      tierLowAdd: 0.5,
+      tierMinScore: 30,
+      tierMaxScore: 40,
     },
     myBidderId: 'my',
   },
@@ -108,6 +119,9 @@ function initTabs() {
 // 配置面板
 // ========================
 function initConfigPanel() {
+  if (State.config.priceStrategy === 'tieredTrimmedBenchmark') {
+    State.config.priceFull = State.config.strategyParams.tierMaxScore ?? 40;
+  }
   syncConfigFromState();
   bindConfigEvents();
   updateStrategyParams();
@@ -132,9 +146,25 @@ function bindConfigEvents() {
     });
   });
   gi('cfg-project').addEventListener('input', () => { State.config.projectName = gi('cfg-project').value; saveState(); });
-  gi('cfg-price-full').addEventListener('input', () => { State.config.priceFull = +gi('cfg-price-full').value || 100; saveState(); });
+  gi('cfg-price-full').addEventListener('input', () => {
+    State.config.priceFull = +gi('cfg-price-full').value || 100;
+    if (State.config.priceStrategy === 'tieredTrimmedBenchmark') {
+      State.config.strategyParams.tierMaxScore = State.config.priceFull;
+      const tierMaxInput = gi('sp-tierMaxScore');
+      if (tierMaxInput) tierMaxInput.value = State.config.priceFull;
+    }
+    saveState();
+  });
   gi('cfg-strategy').addEventListener('change', () => {
+    const previousStrategy = State.config.priceStrategy;
     State.config.priceStrategy = gi('cfg-strategy').value;
+    if (State.config.priceStrategy === 'tieredTrimmedBenchmark') {
+      State.config.priceFull = State.config.strategyParams.tierMaxScore ?? 40;
+      v('cfg-price-full', State.config.priceFull);
+    } else if (previousStrategy === 'tieredTrimmedBenchmark' && State.config.priceFull === (State.config.strategyParams.tierMaxScore ?? 40)) {
+      State.config.priceFull = 100;
+      v('cfg-price-full', 100);
+    }
     updateStrategyParams();
     saveState();
   });
@@ -218,6 +248,42 @@ function updateStrategyParams() {
       ${commonDeduct}
     </div>
     <p class="note">去掉最高价和最低价各若干个后取平均作为基准价</p>`,
+    tieredTrimmedBenchmark: `<div class="form-row">
+      <div class="form-group"><label>高档人数阈值（大于）</label>
+        <input type="number" id="sp-tierHighThreshold" value="${p.tierHighThreshold ?? 10}" step="1" min="1">
+      </div>
+      <div class="form-group"><label>高档去掉两端各（家）</label>
+        <input type="number" id="sp-tierHighTrim" value="${p.tierHighTrim ?? 2}" step="1" min="0">
+      </div>
+      <div class="form-group"><label>中档人数阈值（大于）</label>
+        <input type="number" id="sp-tierMidThreshold" value="${p.tierMidThreshold ?? 5}" step="1" min="0">
+      </div>
+      <div class="form-group"><label>中档去掉两端各（家）</label>
+        <input type="number" id="sp-tierMidTrim" value="${p.tierMidTrim ?? 1}" step="1" min="0">
+      </div>
+      <div class="form-group"><label>平均价系数</label>
+        <input type="number" id="sp-benchmarkFactor" value="${p.benchmarkFactor ?? 0.95}" step="0.01" min="0">
+      </div>
+      <div class="form-group"><label>基准价小数位</label>
+        <input type="number" id="sp-benchmarkDecimals" value="${p.benchmarkDecimals ?? 6}" step="1" min="0" max="10">
+      </div>
+      <div class="form-group"><label>基准价基础分</label>
+        <input type="number" id="sp-tierBaseScore" value="${p.tierBaseScore ?? 35}" step="0.5" min="0">
+      </div>
+      <div class="form-group"><label>高于基准价每1%扣（分）</label>
+        <input type="number" id="sp-tierHighDeduct" value="${p.tierHighDeduct ?? 0.5}" step="0.1" min="0">
+      </div>
+      <div class="form-group"><label>低于基准价每1%加（分）</label>
+        <input type="number" id="sp-tierLowAdd" value="${p.tierLowAdd ?? 0.5}" step="0.1" min="0">
+      </div>
+      <div class="form-group"><label>最低分</label>
+        <input type="number" id="sp-tierMinScore" value="${p.tierMinScore ?? 30}" step="0.5" min="0">
+      </div>
+      <div class="form-group"><label>最高分</label>
+        <input type="number" id="sp-tierMaxScore" value="${p.tierMaxScore ?? 40}" step="0.5" min="0">
+      </div>
+    </div>
+    <p class="note">默认规则：有效投标人&gt;10家时去高去低各2家，6~10家各1家，≤5家不去除；剩余报价均值×0.95，基准价保留6位。基准价35分，高扣0.5、低加0.5，30~40分封顶。当前以报价&gt;0判定有效，无效投标请删除或将报价留空。</p>`,
     intervalScore: `<div class="form-row">
       <div class="form-group"><label>基准价（元）</label>
         <input type="number" id="sp-benchmark" value="${p.benchmark}" step="10000" min="0">
@@ -238,12 +304,16 @@ function updateStrategyParams() {
   container.innerHTML = `<div class="strategy-params">${templates[strategy] || ''}</div>`;
 
   // 绑定参数输入事件
-  const paramIds = ['deductHigh','deductLow','avgBaseScore','avgLowAdd','avgHighDeduct','avgMaxScore','avgMinScore','weightLow','weightAvg','benchmark','lowerPct','upperPct','deductOut','trimCount'];
+  const paramIds = ['deductHigh','deductLow','avgBaseScore','avgLowAdd','avgHighDeduct','avgMaxScore','avgMinScore','weightLow','weightAvg','benchmark','lowerPct','upperPct','deductOut','trimCount','tierHighThreshold','tierMidThreshold','tierHighTrim','tierMidTrim','benchmarkFactor','benchmarkDecimals','tierBaseScore','tierHighDeduct','tierLowAdd','tierMinScore','tierMaxScore'];
   paramIds.forEach(pid => {
     const el = gi('sp-' + pid);
     if (el) {
       el.addEventListener('input', () => {
         State.config.strategyParams[pid] = +el.value;
+        if (pid === 'tierMaxScore' && State.config.priceStrategy === 'tieredTrimmedBenchmark') {
+          State.config.priceFull = +el.value || 40;
+          v('cfg-price-full', State.config.priceFull);
+        }
         saveState();
       });
     }
@@ -375,13 +445,13 @@ function renderResult() {
     </div>
     <div class="summary-card">
       <div class="label">我方价格得分</div>
-      <div class="value">${me ? me.priceScore : '-'}</div>
+      <div class="value">${me ? fmtPriceScore(me.priceScore, config.priceStrategy) : '-'}</div>
       <div class="sub">满分${config.priceFull}分</div>
     </div>
     ${me && me.benchmark ? `<div class="summary-card">
       <div class="label">评标基准价</div>
-      <div class="value">¥${fmt(me.benchmark)}</div>
-      <div class="sub">偏差 ${me.deviation ?? '-'}%</div>
+      <div class="value">¥${fmtBenchmark(me.benchmark, config.priceStrategy)}</div>
+      <div class="sub">偏差 ${me.deviation ?? '-'}%${me.validBidCount != null ? `；有效${me.validBidCount}家，去两端各${me.trimCount}家` : ''}</div>
     </div>` : ''}
   `;
   gi('result-summary').innerHTML = sumHtml;
@@ -403,7 +473,7 @@ function renderResult() {
       <td>${b.name}${b.isMe ? ' <span class="badge badge-yellow">我方</span>' : ''}</td>
       <td>${fmt(b.price)}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
-      <td>${b.priceScore}</td>
+      <td>${fmtPriceScore(b.priceScore, config.priceStrategy)}</td>
       <td>${b.businessScore}</td>
       <td>${b.techScore}</td>
       <td><strong>${b.total.toFixed(4)}</strong></td>
@@ -472,7 +542,7 @@ function calcPredictResult() {
   const benchmark = ranked.find(b => b.benchmark)?.benchmark;
   const benchmarkHtml = benchmark
     ? `<p style="font-size:12px;color:#666;margin-bottom:8px;">
-        评标基准价：¥${fmt(benchmark)}　|　价格策略：${Scoring.strategyNames[strategy]}
+        评标基准价：¥${fmtBenchmark(benchmark, strategy)}　|　价格策略：${Scoring.strategyNames[strategy]}
        </p>`
     : `<p style="font-size:12px;color:#666;margin-bottom:8px;">价格策略：${Scoring.strategyNames[strategy]}</p>`;
 
@@ -488,7 +558,7 @@ function calcPredictResult() {
       <td>${b.name}${b.isMe ? ' <span class="badge badge-yellow">我方</span>' : ''}</td>
       <td>${b.price > 0 ? '¥ ' + fmt(b.price) : '<span style="color:#bbb;">未填</span>'}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
-      <td><strong>${b.priceScore}</strong></td>
+      <td><strong>${fmtPriceScore(b.priceScore, strategy)}</strong></td>
     </tr>`).join('');
 
   gi('predict-result-box').innerHTML = `
@@ -582,7 +652,7 @@ function renderOptimize() {
     const rankColor = r.rank === 1 ? '#16a34a' : r.rank === 2 ? '#2e6da4' : '#dc2626';
     return `<tr>
       <td>¥ ${fmt(r.price)}</td>
-      <td>${r.priceScore}</td>
+      <td>${fmtPriceScore(r.priceScore, config.priceStrategy)}</td>
       <td>
         <span style="display:inline-block;width:${barWidth}px;height:12px;background:${rankColor};border-radius:2px;vertical-align:middle;margin-right:4px;"></span>
         ${r.total.toFixed(4)}
@@ -781,7 +851,7 @@ function calcPartnerStrategy() {
       <td><span class="badge ${badgeClass}">${roleLabel}</span> ${b.name}</td>
       <td>¥ ${fmt(b.price)}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
-      <td><strong>${b.priceScore}</strong></td>
+      <td><strong>${fmtPriceScore(b.priceScore, strategy)}</strong></td>
     </tr>`;
   }).join('');
 
@@ -797,11 +867,11 @@ function calcPartnerStrategy() {
         ${recsHtml}
         ${benchmark ? `<div class="optimize-item">
           <div class="oi-label">预测基准价</div>
-          <div class="oi-value">¥ ${fmt(benchmark)}</div>
+          <div class="oi-value">¥ ${fmtBenchmark(benchmark, strategy)}</div>
         </div>` : ''}
         <div class="optimize-item">
           <div class="oi-label">我方价格得分</div>
-          <div class="oi-value">${me?.priceScore ?? '-'} 分</div>
+          <div class="oi-value">${me ? fmtPriceScore(me.priceScore, strategy) : '-'} 分</div>
         </div>
         <div class="optimize-item">
           <div class="oi-label">我方价格排名</div>
@@ -809,7 +879,7 @@ function calcPartnerStrategy() {
         </div>
       </div>
     </div>
-    <p style="font-size:12px;color:#666;margin:8px 0 6px;">价格策略：${Scoring.strategyNames[strategy]}${benchmark ? '　|　评标基准价：¥' + fmt(benchmark) : ''}</p>
+    <p style="font-size:12px;color:#666;margin:8px 0 6px;">价格策略：${Scoring.strategyNames[strategy]}${benchmark ? '　|　评标基准价：¥' + fmtBenchmark(benchmark, strategy) : ''}</p>
     <div class="table-wrap">
       <table><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>
     </div>`;
@@ -886,7 +956,7 @@ function renderScenarios() {
       <td>¥ ${fmt(s.price)}</td>
       <td>${s.businessScore}</td>
       <td>${s.techScore}</td>
-      <td>${s.priceScore}</td>
+      <td>${fmtPriceScore(s.priceScore, s.strategy)}</td>
       <td>
         <span style="display:inline-block;width:${Math.round(s.total/maxTotal*100)}px;height:12px;background:#2e6da4;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>
         <strong>${s.total.toFixed(4)}</strong>
@@ -939,9 +1009,18 @@ function validateConfig(config) {
 
 function gi(id) { return document.getElementById(id); }
 function v(id, val) { const el = gi(id); if (el) el.value = val; }
-function fmt(num) {
+function fmt(num, maximumFractionDigits = 2, minimumFractionDigits = 0) {
   if (!num && num !== 0) return '-';
-  return Number(num).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+  return Number(num).toLocaleString('zh-CN', { maximumFractionDigits, minimumFractionDigits });
+}
+function fmtBenchmark(num, strategy) {
+  return strategy === 'tieredTrimmedBenchmark' ? fmt(num, 6, 6) : fmt(num);
+}
+function fmtPriceScore(score, strategy = State.config.priceStrategy) {
+  const tieredName = Scoring.strategyNames.tieredTrimmedBenchmark;
+  return strategy === 'tieredTrimmedBenchmark' || strategy === tieredName
+    ? Number(score).toFixed(2)
+    : score;
 }
 function roundText(num) {
   return Number(num).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
@@ -985,6 +1064,7 @@ function loadPreset(name) {
   State.config.priceWeight     = preset.priceWeight;
   State.config.techWeight      = preset.techWeight;
   State.config.priceStrategy   = preset.priceStrategy;
+  State.config.priceFull       = preset.priceFull ?? 100;
   State.config.strategyParams  = { ...State.config.strategyParams, ...preset.strategyParams };
 
   syncConfigFromState();

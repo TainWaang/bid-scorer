@@ -125,7 +125,61 @@ const Scoring = (() => {
     },
 
     /**
-     * 6. 区间得分法
+     * 6. 分档去高去低下浮基准价法
+     * 按有效投标人数自动决定去除数量，剩余报价均值乘以下浮系数；
+     * 基准价保留指定小数位，低于基准价加分、高于基准价扣分。
+     */
+    tieredTrimmedBenchmark(bids, fullScore, params = {}) {
+      const midThreshold = Math.max(0, Math.trunc(params.tierMidThreshold ?? 5));
+      const highThreshold = Math.max(midThreshold, Math.trunc(params.tierHighThreshold ?? 10));
+      const highTrim = Math.max(0, Math.trunc(params.tierHighTrim ?? 2));
+      const midTrim = Math.max(0, Math.trunc(params.tierMidTrim ?? 1));
+      const benchmarkFactor = Number(params.benchmarkFactor) > 0 ? Number(params.benchmarkFactor) : 0.95;
+      const benchmarkDecimals = Math.min(10, Math.max(0, Math.trunc(params.benchmarkDecimals ?? 6)));
+      const baseScore = params.tierBaseScore ?? 35;
+      const highDeduct = params.tierHighDeduct ?? 0.5;
+      const lowAdd = params.tierLowAdd ?? 0.5;
+      const minScore = params.tierMinScore ?? 30;
+      const maxScore = params.tierMaxScore ?? 40;
+
+      const validBids = bids.filter(b => b.price > 0).sort((a, b) => a.price - b.price);
+      if (validBids.length === 0) {
+        return bids.map(b => ({ ...b, priceScore: 0, benchmark: 0, validBidCount: 0, trimCount: 0 }));
+      }
+
+      const requestedTrim = validBids.length > highThreshold
+        ? highTrim
+        : validBids.length > midThreshold
+          ? midTrim
+          : 0;
+      const trimCount = Math.min(requestedTrim, Math.floor((validBids.length - 1) / 2));
+      const included = trimCount > 0
+        ? validBids.slice(trimCount, validBids.length - trimCount)
+        : validBids;
+      const avg = included.reduce((sum, b) => sum + b.price, 0) / included.length;
+      const benchmark = round(avg * benchmarkFactor, benchmarkDecimals);
+
+      return bids.map(b => {
+        if (b.price <= 0) {
+          return { ...b, priceScore: 0, benchmark, validBidCount: validBids.length, trimCount };
+        }
+        const deviation = (b.price - benchmark) / benchmark * 100;
+        const score = deviation > 0
+          ? Math.max(minScore, baseScore - deviation * highDeduct)
+          : Math.min(maxScore, baseScore + Math.abs(deviation) * lowAdd);
+        return {
+          ...b,
+          priceScore: round(score, 2),
+          benchmark,
+          deviation: round(deviation, 2),
+          validBidCount: validBids.length,
+          trimCount,
+        };
+      });
+    },
+
+    /**
+     * 7. 区间得分法
      * 报价在 [基准价×(1-a%), 基准价×(1+b%)] 区间内得满分
      * 超出区间每1%扣X分
      */
@@ -158,10 +212,11 @@ const Scoring = (() => {
    */
   function calcTotal(bidders, config) {
     const { businessWeight, priceWeight, techWeight } = config;
+    const priceFull = Number(config.priceFull) > 0 ? Number(config.priceFull) : 100;
     return bidders.map(b => {
       const total = round(
         b.businessScore * businessWeight / 100 +
-        b.priceScore    * priceWeight    / 100 +
+        b.priceScore    * priceWeight    / priceFull +
         b.techScore     * techWeight     / 100,
         4
       );
@@ -184,11 +239,14 @@ const Scoring = (() => {
     const strategy = config.priceStrategy;
     const params   = config.strategyParams || {};
     const priceFull = config.priceFull ?? 100;
+    const eligibleBidders = strategy === 'tieredTrimmedBenchmark'
+      ? bidders.filter(b => b.price > 0)
+      : bidders;
 
     // 计算价格得分
     let result = PriceStrategies[strategy]
-      ? PriceStrategies[strategy](bidders, priceFull, params)
-      : PriceStrategies.lowestPrice(bidders, priceFull, params);
+      ? PriceStrategies[strategy](eligibleBidders, priceFull, params)
+      : PriceStrategies.lowestPrice(eligibleBidders, priceFull, params);
 
     // 综合得分
     result = calcTotal(result, config);
@@ -306,7 +364,12 @@ const Scoring = (() => {
       compositePrice:  '复合基准价法',
       fixedBenchmark:  '固定基准价法（标底法）',
       trimmedAverage:  '去高去低平均价法',
+      tieredTrimmedBenchmark: '分档去高去低×系数法',
       intervalScore:   '区间得分法',
     },
   };
 })();
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Scoring;
+}

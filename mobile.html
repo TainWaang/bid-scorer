@@ -402,6 +402,7 @@
             <option value="compositePrice">复合基准价法</option>
             <option value="fixedBenchmark">固定基准价法（标底）</option>
             <option value="trimmedAverage">去高去低平均价法</option>
+            <option value="tieredTrimmedBenchmark">分档去高去低×系数法</option>
             <option value="intervalScore">区间得分法</option>
           </select>
         </div>
@@ -563,7 +564,7 @@ const S = {
     businessWeight: 20, priceWeight: 40, techWeight: 40,
     priceFull: 100,
     priceStrategy: 'averagePrice',
-    strategyParams: { deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1 },
+    strategyParams: { deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1, tierHighThreshold:10, tierMidThreshold:5, tierHighTrim:2, tierMidTrim:1, benchmarkFactor:0.95, benchmarkDecimals:6, tierBaseScore:35, tierHighDeduct:0.5, tierLowAdd:0.5, tierMinScore:30, tierMaxScore:40 },
   },
   bidders: [
     { id:'my', name:'我方',    price:0, businessScore:80, techScore:85, isMe:true  },
@@ -612,7 +613,13 @@ function updateWeights() {
 // ── Strategy Params ──
 function initStrategyBinding() {
   gi('m-strategy').addEventListener('change', () => {
+    const previousStrategy = S.config.priceStrategy;
     S.config.priceStrategy = gi('m-strategy').value;
+    if (S.config.priceStrategy === 'tieredTrimmedBenchmark') {
+      S.config.priceFull = S.config.strategyParams.tierMaxScore ?? 40;
+    } else if (previousStrategy === 'tieredTrimmedBenchmark') {
+      S.config.priceFull = 100;
+    }
     renderStrategyParams();
   });
   renderStrategyParams();
@@ -629,6 +636,7 @@ function renderStrategyParams() {
     compositePrice: '基准价 = 最低价×权重A + 平均价×权重B（之和=1）。',
     fixedBenchmark: '基准价由招标方预先设定（标底价），报价越接近越高分。',
     trimmedAverage: '去掉最高价和最低价各若干个后再取平均作为基准价。',
+    tieredTrimmedBenchmark: '按有效投标人数自动去高去低，均值乘系数后计算基准价；低价加分、高价扣分。仅报价>0计为有效，无效投标请删除或留空。',
     intervalScore:  '报价在基准价附近区间内得满分，超出区间则按比例扣分。',
   };
 
@@ -665,6 +673,27 @@ function renderStrategyParams() {
       <label>去掉最高/最低各几个</label>
       <input type="number" data-key="trimCount" value="${p.trimCount}" step="1" min="1" max="3" inputmode="numeric">
     </div>${fieldDeduct}`,
+    tieredTrimmedBenchmark: `<div class="field-row" style="margin-top:10px;">
+      <div class="field"><label>高档阈值（大于）</label><input type="number" data-key="tierHighThreshold" value="${p.tierHighThreshold ?? 10}" step="1" inputmode="numeric"></div>
+      <div class="field"><label>高档去两端各</label><input type="number" data-key="tierHighTrim" value="${p.tierHighTrim ?? 2}" step="1" inputmode="numeric"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>中档阈值（大于）</label><input type="number" data-key="tierMidThreshold" value="${p.tierMidThreshold ?? 5}" step="1" inputmode="numeric"></div>
+      <div class="field"><label>中档去两端各</label><input type="number" data-key="tierMidTrim" value="${p.tierMidTrim ?? 1}" step="1" inputmode="numeric"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>平均价系数</label><input type="number" data-key="benchmarkFactor" value="${p.benchmarkFactor ?? 0.95}" step="0.01" inputmode="decimal"></div>
+      <div class="field"><label>基准价小数位</label><input type="number" data-key="benchmarkDecimals" value="${p.benchmarkDecimals ?? 6}" step="1" inputmode="numeric"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>基准价基础分</label><input type="number" data-key="tierBaseScore" value="${p.tierBaseScore ?? 35}" step="0.5" inputmode="decimal"></div>
+      <div class="field"><label>最低分</label><input type="number" data-key="tierMinScore" value="${p.tierMinScore ?? 30}" step="0.5" inputmode="decimal"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>高于每1%扣</label><input type="number" data-key="tierHighDeduct" value="${p.tierHighDeduct ?? 0.5}" step="0.1" inputmode="decimal"></div>
+      <div class="field"><label>低于每1%加</label><input type="number" data-key="tierLowAdd" value="${p.tierLowAdd ?? 0.5}" step="0.1" inputmode="decimal"></div>
+    </div>
+    <div class="field"><label>最高分</label><input type="number" data-key="tierMaxScore" value="${p.tierMaxScore ?? 40}" step="0.5" inputmode="decimal"></div>`,
     intervalScore: `<div class="field" style="margin-top:10px;">
       <label>基准价（元）</label>
       <input type="number" data-key="benchmark" value="${p.benchmark}" step="10000" inputmode="numeric">
@@ -683,6 +712,9 @@ function renderStrategyParams() {
   container.querySelectorAll('input[data-key]').forEach(el => {
     el.addEventListener('input', () => {
       S.config.strategyParams[el.dataset.key] = +el.value;
+      if (el.dataset.key === 'tierMaxScore' && S.config.priceStrategy === 'tieredTrimmedBenchmark') {
+        S.config.priceFull = +el.value || 40;
+      }
     });
   });
 }
@@ -758,13 +790,14 @@ function renderResult() {
       <div class="my-summary-sub">综合得分 ${me.total.toFixed(4)} 分 · 共${result.length}家投标</div>
       <div class="my-summary-scores">
         <div class="my-score-item"><div class="si-label">商务得分</div><div class="si-val">${me.businessScore}</div></div>
-        <div class="my-score-item"><div class="si-label">价格得分</div><div class="si-val">${me.priceScore}</div></div>
+        <div class="my-score-item"><div class="si-label">价格得分</div><div class="si-val">${fmtPriceScore(me.priceScore, config.priceStrategy)}</div></div>
         <div class="my-score-item"><div class="si-label">技术得分</div><div class="si-val">${me.techScore}</div></div>
       </div>
     </div>`;
     if (me.benchmark) {
       html += `<div class="benchmark-tip">
-        评标基准价：¥ ${fmt(me.benchmark)}&emsp;我方偏差：${me.deviation??'-'}%
+        评标基准价：¥ ${fmtBenchmark(me.benchmark, config.priceStrategy)}&emsp;我方偏差：${me.deviation??'-'}%
+        ${me.validBidCount != null ? `<br>有效${me.validBidCount}家，去最高和最低各${me.trimCount}家` : ''}
       </div>`;
     }
   }
@@ -779,7 +812,7 @@ function renderResult() {
       <div class="rank-meta">
         <div class="rank-meta-item">报价 <span>¥${fmt(b.price)}</span></div>
         <div class="rank-meta-item">商务 <span>${b.businessScore}</span></div>
-        <div class="rank-meta-item">价格 <span>${b.priceScore}</span></div>
+        <div class="rank-meta-item">价格 <span>${fmtPriceScore(b.priceScore, config.priceStrategy)}</span></div>
         <div class="rank-meta-item">技术 <span>${b.techScore}</span></div>
         ${b.deviation!=null?`<div class="rank-meta-item">偏差 <span>${b.deviation}%</span></div>`:''}
       </div>
@@ -896,7 +929,7 @@ function renderScenarios() {
       </div>
       <div class="sc-details">
         <div class="sc-detail-item"><div class="dl">报价</div><div class="dv" style="font-size:12px;">¥${fmtShort(s.price)}</div></div>
-        <div class="sc-detail-item"><div class="dl">商务/价格/技术</div><div class="dv" style="font-size:12px;">${s.businessScore}/${s.priceScore}/${s.techScore}</div></div>
+        <div class="sc-detail-item"><div class="dl">商务/价格/技术</div><div class="dv" style="font-size:12px;">${s.businessScore}/${fmtPriceScore(s.priceScore, s.strategy)}/${s.techScore}</div></div>
         <div class="sc-detail-item">
           <button class="btn-danger-sm" onclick="removeScenario(${i})">删除</button>
         </div>
@@ -922,6 +955,7 @@ function loadPreset(name) {
   S.config.priceWeight    = p.priceWeight;
   S.config.techWeight     = p.techWeight;
   S.config.priceStrategy  = p.priceStrategy;
+  S.config.priceFull      = 100;
   gi('m-bw').value = p.businessWeight;
   gi('m-pw').value = p.priceWeight;
   gi('m-tw').value = p.techWeight;
@@ -946,6 +980,16 @@ function buildConfig() {
 }
 function gi(id) { return document.getElementById(id); }
 function fmt(n) { if(!n&&n!==0) return '-'; return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:0}); }
+function fmtBenchmark(n, strategy) {
+  if (strategy !== 'tieredTrimmedBenchmark') return fmt(n);
+  return Number(n).toLocaleString('zh-CN',{minimumFractionDigits:6,maximumFractionDigits:6});
+}
+function fmtPriceScore(score, strategy = S.config.priceStrategy) {
+  const tieredName = Scoring.strategyNames.tieredTrimmedBenchmark;
+  return strategy === 'tieredTrimmedBenchmark' || strategy === tieredName
+    ? Number(score).toFixed(2)
+    : score;
+}
 function fmtShort(n) {
   if (!n&&n!==0) return '-';
   if (n>=10000) return (n/10000).toFixed(1)+'万';
