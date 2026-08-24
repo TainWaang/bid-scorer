@@ -77,6 +77,7 @@
           <select id="cfg-strategy">
             <option value="lowestPrice">最低价法（最低报价得满分）</option>
             <option value="averagePrice" selected>平均价法（平均值为基准价）</option>
+            <option value="outlierFilteredBenchmark">高价阈值剔除×系数平均价法</option>
             <option value="compositePrice">复合基准价法（最低价+平均价加权）</option>
             <option value="fixedBenchmark">固定基准价法</option>
             <option value="trimmedAverage">去高去低平均价法</option>
@@ -116,7 +117,7 @@
     <div class="card">
       <div class="card-title">报价与评分录入</div>
       <p class="note" style="margin-bottom:12px;">
-        报价样本名称在“① 评分规则配置”中管理；价格得分由系统根据报价和当前评分方法自动计算。
+        报价样本名称在“① 评分规则配置”中管理；价格得分由系统根据报价和当前评分方法自动计算。报价支持输入 4500000 或 4,500,000。
       </p>
       <div class="table-wrap">
         <table>
@@ -140,6 +141,7 @@
     <div id="result-area" style="display:none;">
       <div class="card">
         <div id="result-weight-info" style="font-size:12px;color:#666;margin-bottom:12px;"></div>
+        <div id="result-bid-status"></div>
         <div class="summary-grid" id="result-summary"></div>
       </div>
       <div class="card">

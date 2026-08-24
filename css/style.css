@@ -337,6 +337,37 @@ tr.rank-1 td:first-child::after {
   margin-bottom: 16px;
 }
 
+.bid-validity-status {
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.bid-validity-status.warn {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.bid-validity-status strong {
+  font-weight: 700;
+}
+
+.price-input-invalid {
+  border-color: #dc2626 !important;
+  background: #fef2f2 !important;
+}
+
+.score-reason {
+  color: #166534;
+  font-weight: 600;
+}
+
 .summary-card {
   background: linear-gradient(135deg, #1a3a5c, #2e6da4);
   color: #fff;

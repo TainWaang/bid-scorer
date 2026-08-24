@@ -6,6 +6,70 @@
 const Scoring = (() => {
 
   /**
+   * 将单个报价输入标准化为正数。
+   * 支持半角/全角逗号、空格以及人民币符号；空值和非法值返回 0。
+   */
+  function normalizePriceInput(value) {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) && value > 0 ? value : 0;
+    }
+    const normalized = String(value ?? '')
+      .trim()
+      .replace(/[,，\s¥￥]/g, '');
+    if (!normalized) return 0;
+    const price = Number(normalized);
+    return Number.isFinite(price) && price > 0 ? price : 0;
+  }
+
+  /**
+   * 汇总已建立样本与有效/未计入样本，供计算和界面提示共用。
+   */
+  function summarizeBidValidity(bidders = []) {
+    const normalizedBidders = bidders.map(bidder => ({
+      ...bidder,
+      price: normalizePriceInput(bidder.price),
+    }));
+    const validBidders = normalizedBidders.filter(bidder => bidder.price > 0);
+    const invalidBidders = normalizedBidders.filter(bidder => bidder.price <= 0);
+    return {
+      totalCount: normalizedBidders.length,
+      validCount: validBidders.length,
+      invalidCount: invalidBidders.length,
+      normalizedBidders,
+      validBidders,
+      invalidBidders,
+    };
+  }
+
+  function validateStrategyConfig(strategy, fullScore, params = {}) {
+    if (strategy !== 'outlierFilteredBenchmark') return [];
+    const errors = [];
+    const score = Number(fullScore);
+    const cutoff = Number(params.outlierCutoffMultiple ?? 1.5);
+    const factor = Number(params.outlierBenchmarkFactor ?? 0.95);
+    const highDeduct = Number(params.outlierHighDeduct ?? 0.8);
+    const lowDeduct = Number(params.outlierLowDeduct ?? 0.3);
+    const minScore = Number(params.outlierMinScore ?? 0);
+    const decimals = Number(params.outlierDeviationDecimals ?? 2);
+    if (!Number.isFinite(score) || score <= 0) errors.push('价格满分必须大于0');
+    if (!Number.isFinite(cutoff) || cutoff <= 1) errors.push('高价剔除阈值倍数必须大于1');
+    if (!Number.isFinite(factor) || factor <= 0) errors.push('基准价系数必须大于0');
+    if (!Number.isFinite(highDeduct) || highDeduct < 0) errors.push('高于基准价扣分不能小于0');
+    if (!Number.isFinite(lowDeduct) || lowDeduct < 0) errors.push('低于基准价扣分不能小于0');
+    if (!Number.isFinite(minScore) || minScore < 0) errors.push('最低分不能小于0');
+    if (Number.isFinite(score) && Number.isFinite(minScore) && minScore > score) errors.push('最低分不能高于价格满分');
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 10) errors.push('偏差率小数位必须是0到10之间的整数');
+    return errors;
+  }
+
+  function roundHalfAwayFromZero(value, decimals) {
+    const factor = 10 ** decimals;
+    const scaled = Math.abs(Number(value)) * factor;
+    const rounded = Math.round(scaled + 1e-10) / factor;
+    return Number(value) < 0 ? -rounded : rounded;
+  }
+
+  /**
    * 价格评分策略
    */
   const PriceStrategies = {
@@ -52,7 +116,100 @@ const Scoring = (() => {
     },
 
     /**
-     * 3. 复合基准价法
+     * 3. 高价阈值剔除×系数平均价法
+     * 先计算全部有效报价的初始均值；达到初始均值×阈值倍数的报价不参与
+     * 基准价计算。其余报价的均值乘系数得到基准价。偏差率先按指定小数位
+     * 舍入，再分别按高/低侧斜率扣分。技术得分最高且有效报价最低时满分。
+     */
+    outlierFilteredBenchmark(bids, fullScore, params = {}) {
+      const configErrors = validateStrategyConfig('outlierFilteredBenchmark', fullScore, params);
+      if (configErrors.length > 0) throw new Error(configErrors.join('；'));
+      const fullScoreValue = Number(fullScore);
+      const maximumScore = Number.isFinite(fullScoreValue) && fullScoreValue > 0 ? fullScoreValue : 46;
+      const cutoffValue = Number(params.outlierCutoffMultiple);
+      const cutoffMultiple = Number.isFinite(cutoffValue) && cutoffValue > 1 ? cutoffValue : 1.5;
+      const factorValue = Number(params.outlierBenchmarkFactor);
+      const benchmarkFactor = Number.isFinite(factorValue) && factorValue > 0 ? factorValue : 0.95;
+      const highDeductValue = Number(params.outlierHighDeduct ?? 0.8);
+      const highDeduct = Number.isFinite(highDeductValue) && highDeductValue >= 0 ? highDeductValue : 0.8;
+      const lowDeductValue = Number(params.outlierLowDeduct ?? 0.3);
+      const lowDeduct = Number.isFinite(lowDeductValue) && lowDeductValue >= 0 ? lowDeductValue : 0.3;
+      const minScoreValue = Number(params.outlierMinScore ?? 0);
+      const minScore = Number.isFinite(minScoreValue)
+        ? Math.min(maximumScore, Math.max(0, minScoreValue))
+        : 0;
+      const deviationDecimals = Math.min(10, Math.max(0, Math.trunc(params.outlierDeviationDecimals ?? 2)));
+      const specialFullScoreEnabled = params.outlierSpecialFullScore !== false && params.outlierSpecialFullScore !== 0;
+      const { normalizedBidders, validBidders } = summarizeBidValidity(bids);
+
+      if (validBidders.length === 0) {
+        return normalizedBidders.map(bidder => ({
+          ...bidder,
+          priceScore: 0,
+          benchmark: 0,
+          deviation: null,
+          validBidCount: 0,
+          includedBidCount: 0,
+          excludedHighBidCount: 0,
+          excludedHighBidderNames: [],
+          preliminaryAverage: 0,
+          exclusionThreshold: 0,
+          specialFullScore: false,
+        }));
+      }
+
+      const preliminaryAverage = validBidders.reduce((sum, bidder) => sum + bidder.price, 0) / validBidders.length;
+      const exclusionThreshold = preliminaryAverage * cutoffMultiple;
+      const includedBids = validBidders.filter(bidder => bidder.price < exclusionThreshold);
+      const excludedHighBids = validBidders.filter(bidder => bidder.price >= exclusionThreshold);
+      const includedTotal = includedBids.reduce((sum, bidder) => sum + bidder.price, 0);
+      const benchmark = includedTotal / includedBids.length * benchmarkFactor;
+      const technicalScoresAvailable = validBidders.every(bidder =>
+        bidder.techScore !== '' && bidder.techScore != null && Number.isFinite(Number(bidder.techScore))
+      );
+      const highestTechnicalScore = technicalScoresAvailable
+        ? Math.max(...validBidders.map(bidder => Number(bidder.techScore)))
+        : null;
+      const lowestValidPrice = Math.min(...validBidders.map(bidder => bidder.price));
+
+      return normalizedBidders.map(bidder => {
+        const metadata = {
+          benchmark,
+          validBidCount: validBidders.length,
+          includedBidCount: includedBids.length,
+          excludedHighBidCount: excludedHighBids.length,
+          excludedHighBidderNames: excludedHighBids.map(excluded => excluded.name || '未命名样本'),
+          preliminaryAverage,
+          exclusionThreshold,
+        };
+        if (bidder.price <= 0) {
+          return { ...bidder, ...metadata, priceScore: 0, deviation: null, specialFullScore: false };
+        }
+
+        const deviation = roundHalfAwayFromZero(
+          (bidder.price - benchmark) / benchmark * 100,
+          deviationDecimals
+        );
+        const specialFullScore = specialFullScoreEnabled && technicalScoresAvailable &&
+          Number(bidder.techScore) === highestTechnicalScore && bidder.price === lowestValidPrice;
+        const deduction = deviation > 0
+          ? deviation * highDeduct
+          : Math.abs(deviation) * lowDeduct;
+        const score = specialFullScore
+          ? maximumScore
+          : Math.max(minScore, maximumScore - deduction);
+        return {
+          ...bidder,
+          ...metadata,
+          priceScore: roundHalfAwayFromZero(score, 2),
+          deviation,
+          specialFullScore,
+        };
+      });
+    },
+
+    /**
+     * 4. 复合基准价法
      * 基准价 = A×最低价 + B×平均价  (A+B=1)
      * 偏差扣分同平均价法
      */
@@ -78,7 +235,7 @@ const Scoring = (() => {
     },
 
     /**
-     * 4. 固定基准价法
+     * 5. 固定基准价法
      * 基准价由用户按适用规则预先设置
      * 偏差扣分同平均价法
      */
@@ -99,7 +256,7 @@ const Scoring = (() => {
     },
 
     /**
-     * 5. 去最高最低后平均价法
+     * 6. 去最高最低后平均价法
      * 去掉最高价和最低价后取平均作为基准价
      */
     trimmedAverage(bids, fullScore, params = {}) {
@@ -125,7 +282,7 @@ const Scoring = (() => {
     },
 
     /**
-     * 6. 分档去高去低下浮基准价法
+     * 7. 分档去高去低下浮基准价法
      * 按有效报价样本数自动决定去除数量，剩余报价均值乘以下浮系数；
      * 基准价保留指定小数位，低于基准价加分、高于基准价扣分。
      */
@@ -142,9 +299,10 @@ const Scoring = (() => {
       const minScore = params.tierMinScore ?? 30;
       const maxScore = params.tierMaxScore ?? 40;
 
-      const validBids = bids.filter(b => b.price > 0).sort((a, b) => a.price - b.price);
+      const { normalizedBidders, validBidders } = summarizeBidValidity(bids);
+      const validBids = [...validBidders].sort((a, b) => a.price - b.price);
       if (validBids.length === 0) {
-        return bids.map(b => ({ ...b, priceScore: 0, benchmark: 0, validBidCount: 0, trimCount: 0 }));
+        return normalizedBidders.map(b => ({ ...b, priceScore: 0, benchmark: 0, validBidCount: 0, trimCount: 0, includedBidCount: 0 }));
       }
 
       const requestedTrim = validBids.length > highThreshold
@@ -159,9 +317,9 @@ const Scoring = (() => {
       const avg = included.reduce((sum, b) => sum + b.price, 0) / included.length;
       const benchmark = round(avg * benchmarkFactor, benchmarkDecimals);
 
-      return bids.map(b => {
+      return normalizedBidders.map(b => {
         if (b.price <= 0) {
-          return { ...b, priceScore: 0, benchmark, validBidCount: validBids.length, trimCount };
+          return { ...b, priceScore: 0, benchmark, validBidCount: validBids.length, trimCount, includedBidCount: included.length };
         }
         const deviation = (b.price - benchmark) / benchmark * 100;
         const score = deviation > 0
@@ -174,12 +332,13 @@ const Scoring = (() => {
           deviation: round(deviation, 2),
           validBidCount: validBids.length,
           trimCount,
+          includedBidCount: included.length,
         };
       });
     },
 
     /**
-     * 7. 区间得分法
+     * 8. 区间得分法
      * 报价在 [基准价×(1-a%), 基准价×(1+b%)] 区间内得满分
      * 超出区间每1%扣X分
      */
@@ -239,9 +398,10 @@ const Scoring = (() => {
     const strategy = config.priceStrategy;
     const params   = config.strategyParams || {};
     const priceFull = config.priceFull ?? 100;
-    const eligibleBidders = strategy === 'tieredTrimmedBenchmark'
-      ? bidders.filter(b => b.price > 0)
-      : bidders;
+    const { normalizedBidders } = summarizeBidValidity(bidders);
+    const eligibleBidders = strategy === 'tieredTrimmedBenchmark' || strategy === 'outlierFilteredBenchmark'
+      ? normalizedBidders.filter(b => b.price > 0)
+      : normalizedBidders;
 
     // 计算价格得分
     let result = PriceStrategies[strategy]
@@ -437,6 +597,12 @@ const Scoring = (() => {
           benchmark: me.benchmark ?? null,
           deviation: me.deviation ?? null,
           trimCount: me.trimCount ?? null,
+          includedBidCount: me.includedBidCount ?? null,
+          excludedHighBidCount: me.excludedHighBidCount ?? null,
+          excludedHighBidderNames: me.excludedHighBidderNames ?? [],
+          preliminaryAverage: me.preliminaryAverage ?? null,
+          exclusionThreshold: me.exclusionThreshold ?? null,
+          specialFullScore: me.specialFullScore ?? false,
         };
       });
 
@@ -508,6 +674,9 @@ const Scoring = (() => {
 
   return {
     PriceStrategies,
+    normalizePriceInput,
+    summarizeBidValidity,
+    validateStrategyConfig,
     evaluate,
     findOptimalPrice,
     parsePriceScenarios,
@@ -517,6 +686,7 @@ const Scoring = (() => {
     strategyNames: {
       lowestPrice:     '最低价法',
       averagePrice:    '平均价法',
+      outlierFilteredBenchmark: '高价阈值剔除×系数平均价法',
       compositePrice:  '复合基准价法',
       fixedBenchmark:  '固定基准价法',
       trimmedAverage:  '去高去低平均价法',

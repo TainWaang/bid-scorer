@@ -183,6 +183,9 @@
     .field input.highlight {
       border-color: var(--blue); background: var(--blue-soft);
     }
+    .field input.price-input-invalid {
+      border-color: var(--red); background: var(--red-soft);
+    }
     .field-row { display: flex; gap: 10px; }
     .field-row .field { flex: 1; margin-bottom: 0; }
     .field-row + .field, .field-row + .field-row { margin-top: 16px; }
@@ -374,6 +377,13 @@
 
     /* ── Misc ── */
     .note { font-size: 12px; color: var(--text2); line-height: 1.65; margin-top: 8px; }
+    .bid-validity-status {
+      border: 1px solid #bbf7d0; border-radius: var(--radius-sm);
+      background: var(--green-soft); color: #166534;
+      padding: 12px; margin-bottom: 14px;
+      font-size: 12px; line-height: 1.65;
+    }
+    .bid-validity-status.warn { border-color: #fed7aa; background: var(--orange-soft); color: #9a3412; }
     .error-note { color: var(--red); }
     .target-label { color: var(--blue); font-weight: 700; }
     .text-center { text-align: center; }
@@ -487,6 +497,7 @@
           <select id="m-strategy">
             <option value="lowestPrice">最低价法</option>
             <option value="averagePrice" selected>平均价法</option>
+            <option value="outlierFilteredBenchmark">高价阈值剔除×系数平均价法</option>
             <option value="compositePrice">复合基准价法</option>
             <option value="fixedBenchmark">固定基准价法</option>
             <option value="trimmedAverage">去高去低平均价法</option>
@@ -531,6 +542,7 @@
         <ul class="info-list">
           <li>商务分/技术分：填写独立假设值</li>
           <li>其他报价：填写用户自行设定的情景样本</li>
+          <li>单个报价支持 4500000 或 4,500,000</li>
           <li>目标报价可留空，在“优化”页面自动求解</li>
         </ul>
       </div>
@@ -661,7 +673,7 @@ const S = {
     businessWeight: 20, priceWeight: 40, techWeight: 40,
     priceFull: 100,
     priceStrategy: 'averagePrice',
-    strategyParams: { deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1, tierHighThreshold:10, tierMidThreshold:5, tierHighTrim:2, tierMidTrim:1, benchmarkFactor:0.95, benchmarkDecimals:6, tierBaseScore:35, tierHighDeduct:0.5, tierLowAdd:0.5, tierMinScore:30, tierMaxScore:40 },
+    strategyParams: { deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, outlierCutoffMultiple:1.5, outlierBenchmarkFactor:0.95, outlierHighDeduct:0.8, outlierLowDeduct:0.3, outlierMinScore:0, outlierDeviationDecimals:2, outlierFullScore:46, outlierSpecialFullScore:1, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1, tierHighThreshold:10, tierMidThreshold:5, tierHighTrim:2, tierMidTrim:1, benchmarkFactor:0.95, benchmarkDecimals:6, tierBaseScore:35, tierHighDeduct:0.5, tierLowAdd:0.5, tierMinScore:30, tierMaxScore:40 },
   },
   bidders: [
     { id:'my', name:'目标方案', price:0, businessScore:80, techScore:85, isMe:true  },
@@ -711,15 +723,23 @@ function updateWeights() {
 function initStrategyBinding() {
   gi('m-strategy').addEventListener('change', () => {
     const previousStrategy = S.config.priceStrategy;
+    const previousComponentFullScore = mobileComponentFullScore(previousStrategy);
     S.config.priceStrategy = gi('m-strategy').value;
-    if (S.config.priceStrategy === 'tieredTrimmedBenchmark') {
-      S.config.priceFull = S.config.strategyParams.tierMaxScore ?? 40;
-    } else if (previousStrategy === 'tieredTrimmedBenchmark') {
+    const nextComponentFullScore = mobileComponentFullScore(S.config.priceStrategy);
+    if (nextComponentFullScore != null) {
+      S.config.priceFull = nextComponentFullScore;
+    } else if (previousComponentFullScore != null && S.config.priceFull === previousComponentFullScore) {
       S.config.priceFull = 100;
     }
     renderStrategyParams();
   });
   renderStrategyParams();
+}
+
+function mobileComponentFullScore(strategy) {
+  if (strategy === 'tieredTrimmedBenchmark') return S.config.strategyParams.tierMaxScore ?? 40;
+  if (strategy === 'outlierFilteredBenchmark') return S.config.strategyParams.outlierFullScore ?? 46;
+  return null;
 }
 
 function renderStrategyParams() {
@@ -730,6 +750,7 @@ function renderStrategyParams() {
   const tips = {
     lowestPrice:    '最低报价得满分，其他按比例扣分，无需额外参数。',
     averagePrice:   '基准价 = 所有报价算术平均值；平均价得分、加扣分斜率和上下限均可配置。',
+    outlierFilteredBenchmark: '达到全部有效报价初始均值×阈值的高价不参与基准价计算；其余均值×系数。高低两侧均扣分；技术最高且有效报价最低时满分。',
     compositePrice: '基准价 = 最低价×权重A + 平均价×权重B（之和=1）。',
     fixedBenchmark: '基准价由用户按适用规则预先设置，报价越接近越高分。',
     trimmedAverage: '去掉最高价和最低价各若干个后再取平均作为基准价。',
@@ -758,6 +779,19 @@ function renderStrategyParams() {
       <div class="field"><label>高于均价每1%减</label><input type="number" data-key="avgHighDeduct" value="${p.avgHighDeduct ?? 1}" step="0.1" inputmode="decimal"></div>
     </div>
     <div class="field"><label>最低分</label><input type="number" data-key="avgMinScore" value="${p.avgMinScore ?? 0}" step="0.5" inputmode="decimal"></div>`,
+    outlierFilteredBenchmark: `<div class="field-row">
+      <div class="field"><label>高价剔除倍数</label><input type="number" data-key="outlierCutoffMultiple" value="${p.outlierCutoffMultiple ?? 1.5}" step="0.01" min="1.01" inputmode="decimal"></div>
+      <div class="field"><label>基准价系数</label><input type="number" data-key="outlierBenchmarkFactor" value="${p.outlierBenchmarkFactor ?? 0.95}" step="0.01" min="0.01" inputmode="decimal"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>高于每1%扣</label><input type="number" data-key="outlierHighDeduct" value="${p.outlierHighDeduct ?? 0.8}" step="0.1" min="0" inputmode="decimal"></div>
+      <div class="field"><label>低于每1%扣</label><input type="number" data-key="outlierLowDeduct" value="${p.outlierLowDeduct ?? 0.3}" step="0.1" min="0" inputmode="decimal"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>最低分</label><input type="number" data-key="outlierMinScore" value="${p.outlierMinScore ?? 0}" step="0.5" min="0" inputmode="decimal"></div>
+      <div class="field"><label>偏差率小数位</label><input type="number" data-key="outlierDeviationDecimals" value="${p.outlierDeviationDecimals ?? 2}" step="1" min="0" max="10" inputmode="numeric"></div>
+    </div>
+    <div class="field"><label>价格满分</label><input type="number" data-key="outlierFullScore" value="${p.outlierFullScore ?? 46}" step="0.5" min="0.5" inputmode="decimal"></div>`,
     compositePrice: `<div class="field-row">
       <div class="field"><label>最低价权重</label><input type="number" data-key="weightLow" value="${p.weightLow}" step="0.05" min="0" max="1" inputmode="decimal"></div>
       <div class="field"><label>平均价权重</label><input type="number" data-key="weightAvg" value="${p.weightAvg}" step="0.05" min="0" max="1" inputmode="decimal"></div>
@@ -811,6 +845,8 @@ function renderStrategyParams() {
       S.config.strategyParams[el.dataset.key] = +el.value;
       if (el.dataset.key === 'tierMaxScore' && S.config.priceStrategy === 'tieredTrimmedBenchmark') {
         S.config.priceFull = +el.value || 40;
+      } else if (el.dataset.key === 'outlierFullScore' && S.config.priceStrategy === 'outlierFilteredBenchmark') {
+        S.config.priceFull = +el.value || 46;
       }
     });
   });
@@ -834,10 +870,10 @@ function renderBidders() {
       </div>
       <div class="field">
         <label>报价（元）${b.isMe?'<span class="target-label"> 目标</span>':''}</label>
-        <input type="number" value="${b.price||''}" placeholder="${b.isMe?'填写目标报价':'填写其他假设报价'}"
-          class="${b.isMe?'highlight':''}" inputmode="numeric" step="1000"
-          oninput="S.bidders[${idx}].price=+this.value"
-          onchange="S.bidders[${idx}].price=+this.value">
+        <input type="text" value="${b.price>0?fmt(b.price):''}" placeholder="${b.isMe?'填写目标报价':'填写其他假设报价'}"
+          class="${b.isMe?'highlight':''}" inputmode="decimal" autocomplete="off"
+          oninput="updateMobileBidderPrice(${idx},this)"
+          onblur="formatMobileBidderPrice(${idx},this)">
       </div>
       <div class="scores-row">
         <div class="score-field">
@@ -869,15 +905,53 @@ function removeBidder(idx) {
   renderBidders();
 }
 
+function updateMobileBidderPrice(idx, input) {
+  const rawValue = input.value;
+  const price = Scoring.normalizePriceInput(rawValue);
+  S.bidders[idx].price = price;
+  input.classList.toggle('price-input-invalid', rawValue.trim() !== '' && price <= 0);
+}
+
+function formatMobileBidderPrice(idx, input) {
+  const price = S.bidders[idx]?.price || 0;
+  if (price > 0) input.value = fmt(price);
+}
+
 // ── Result ──
 function renderResult() {
   const config = buildConfig();
+  const content = gi('result-content');
+  const configErrors = Scoring.validateStrategyConfig(config.priceStrategy, config.priceFull, config.strategyParams);
+  if (configErrors.length > 0) {
+    content.innerHTML = `<div class="card"><p class="note error-note">${escapeHtml(configErrors.join('；'))}</p></div>`;
+    return;
+  }
   const bidders = S.bidders.map(b=>({...b}));
+  const bidValidity = Scoring.summarizeBidValidity(bidders);
   const result  = Scoring.evaluate(bidders, config);
   const me = result.find(b=>b.isMe);
-  const content = gi('result-content');
 
   let html = '';
+  const invalidNames = bidValidity.invalidBidders
+    .map(bidder=>escapeHtml(bidder.name || '未命名样本'))
+    .join('、');
+  let countDetailText = '';
+  if (config.priceStrategy === 'tieredTrimmedBenchmark' && result[0]) {
+    countDetailText = `去最高、最低各${result[0].trimCount}个，基准价平均值纳入${result[0].includedBidCount}个报价。`;
+  } else if (config.priceStrategy === 'outlierFilteredBenchmark' && result[0]) {
+    const excludedNames = result[0].excludedHighBidderNames.map(name=>escapeHtml(name)).join('、');
+    const excludedNamesText = excludedNames ? `（${excludedNames}）` : '';
+    countDetailText = `初始均值¥${fmtDecimal(result[0].preliminaryAverage)}，达到¥${fmtDecimal(result[0].exclusionThreshold)}的${result[0].excludedHighBidCount}个高价${excludedNamesText}不参与基准价计算，最终纳入${result[0].includedBidCount}个报价。`;
+  }
+  const filtersInvalidBidders = config.priceStrategy === 'tieredTrimmedBenchmark' ||
+    config.priceStrategy === 'outlierFilteredBenchmark';
+  const invalidImpactText = filtersInvalidBidders
+    ? '未进入本次评分及基准价计算'
+    : '报价未进入价格基准计算';
+  html += `<div class="bid-validity-status${bidValidity.invalidCount?' warn':''}">
+    <strong>已建立${bidValidity.totalCount}个样本，有效${bidValidity.validCount}个。</strong>
+    ${bidValidity.invalidCount?`${invalidImpactText}：${invalidNames}（报价为空、为0或格式无效）。`:''}${countDetailText}
+  </div>`;
 
   // My summary
   if (me) {
@@ -885,17 +959,17 @@ function renderResult() {
     html += `<div class="my-summary">
       <div class="my-summary-title">目标方案综合评分结果</div>
       <div class="my-summary-rank">${rankLabel}</div>
-      <div class="my-summary-sub">综合得分 ${me.total.toFixed(4)} 分 · 共${result.length}个报价样本</div>
+      <div class="my-summary-sub">综合得分 ${me.total.toFixed(4)} 分 · 有效${bidValidity.validCount}/已建立${bidValidity.totalCount}</div>
       <div class="my-summary-scores">
         <div class="my-score-item"><div class="si-label">商务得分</div><div class="si-val">${me.businessScore}</div></div>
-        <div class="my-score-item"><div class="si-label">价格得分</div><div class="si-val">${fmtPriceScore(me.priceScore, config.priceStrategy)}</div></div>
+        <div class="my-score-item"><div class="si-label">价格得分${me.specialFullScore?' · 特殊满分':''}</div><div class="si-val">${fmtPriceScore(me.priceScore, config.priceStrategy)}</div></div>
         <div class="my-score-item"><div class="si-label">技术得分</div><div class="si-val">${me.techScore}</div></div>
       </div>
     </div>`;
     if (me.benchmark) {
       html += `<div class="benchmark-tip">
         评分基准价：¥ ${fmtBenchmark(me.benchmark, config.priceStrategy)}&emsp;目标偏差：${me.deviation??'-'}%
-        ${me.validBidCount != null ? `<br>有效${me.validBidCount}家，去最高和最低各${me.trimCount}家` : ''}
+        ${formatMobileBenchmarkCountDetails(me, config.priceStrategy)}
       </div>`;
     }
   }
@@ -910,7 +984,7 @@ function renderResult() {
       <div class="rank-meta">
         <div class="rank-meta-item">报价 <span>¥${fmt(b.price)}</span></div>
         <div class="rank-meta-item">商务 <span>${b.businessScore}</span></div>
-        <div class="rank-meta-item">价格 <span>${fmtPriceScore(b.priceScore, config.priceStrategy)}</span></div>
+        <div class="rank-meta-item">价格 <span>${fmtPriceScore(b.priceScore, config.priceStrategy)}${b.specialFullScore?'（技术最高且最低价满分）':''}</span></div>
         <div class="rank-meta-item">技术 <span>${b.techScore}</span></div>
         ${b.deviation!=null?`<div class="rank-meta-item">偏差 <span>${b.deviation}%</span></div>`:''}
       </div>
@@ -1006,12 +1080,15 @@ function runOptimize() {
   }
   const best = optimization.best;
   const countsText = optimization.participantCounts.map(count=>`${count}个`).join('、');
+  const specialRuleSearchNote = config.priceStrategy === 'outlierFilteredBenchmark'
+    ? '；情景未提供技术分，特殊满分条件不纳入本次价格搜索'
+    : '';
   const detailsHtml = best.details.map(detail=>`<div class="scenario-card ${detail.isTop?'s-first':''}">
     <div class="sc-head"><div class="sc-name">${escapeHtml(detail.name)} · ${detail.participantCount}个</div><div class="sc-rank ${detail.isTop?'first':''}">第${detail.priceRank}名</div></div>
     <div class="sc-details">
       <div class="sc-detail-item"><div class="dl">基准价</div><div class="dv">${detail.benchmark==null?'—':'¥'+fmtBenchmark(detail.benchmark,config.priceStrategy)}</div></div>
       <div class="sc-detail-item"><div class="dl">目标价格分</div><div class="dv">${fmtPriceScore(detail.priceScore,config.priceStrategy)}</div></div>
-      <div class="sc-detail-item"><div class="dl">去高/去低</div><div class="dv">${detail.trimCount==null?'—':`各${detail.trimCount}个`}</div></div>
+      <div class="sc-detail-item"><div class="dl">剔除 / 纳入</div><div class="dv">${formatMobileScenarioInclusion(detail,config.priceStrategy)}</div></div>
     </div>
   </div>`).join('');
 
@@ -1024,7 +1101,7 @@ function runOptimize() {
       <div class="opt-meta-item"><div class="oml">最低 / 平均价格分</div><div class="omv">${fmtPriceScore(best.minScore,config.priceStrategy)} / ${fmtPriceScore(best.avgScore,config.priceStrategy)}</div></div>
       <div class="opt-meta-item"><div class="oml">最差价格排名</div><div class="omv">第${best.worstRank}名</div></div>
     </div>
-    <div class="result-context">规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy]||config.priceStrategy)}；${optimization.scenarioCount}个等权情景；样本数量覆盖：${countsText}；只改变目标报价</div>
+    <div class="result-context">规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy]||config.priceStrategy)}；${optimization.scenarioCount}个等权情景；样本数量覆盖：${countsText}；只改变目标报价${specialRuleSearchNote}</div>
   </div>
   <div class="card"><div class="card-head">推荐价逐情景结果</div>${detailsHtml}</div>`;
 
@@ -1117,7 +1194,8 @@ function loadPreset(name) {
   S.config.priceWeight    = p.priceWeight;
   S.config.techWeight     = p.techWeight;
   S.config.priceStrategy  = p.priceStrategy;
-  S.config.priceFull      = 100;
+  S.config.priceFull      = p.priceFull ?? 100;
+  S.config.strategyParams = { ...S.config.strategyParams, ...(p.strategyParams || {}) };
   gi('m-bw').value = p.businessWeight;
   gi('m-pw').value = p.priceWeight;
   gi('m-tw').value = p.techWeight;
@@ -1142,15 +1220,37 @@ function buildConfig() {
 }
 function gi(id) { return document.getElementById(id); }
 function fmt(n) { if(!n&&n!==0) return '-'; return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:0}); }
+function fmtDecimal(n, maximumFractionDigits = 2) {
+  if (!n && n !== 0) return '-';
+  return Number(n).toLocaleString('zh-CN', { maximumFractionDigits });
+}
 function fmtBenchmark(n, strategy) {
+  if (strategy === 'outlierFilteredBenchmark') return fmtDecimal(n, 2);
   if (strategy !== 'tieredTrimmedBenchmark') return fmt(n);
   return Number(n).toLocaleString('zh-CN',{minimumFractionDigits:6,maximumFractionDigits:6});
 }
 function fmtPriceScore(score, strategy = S.config.priceStrategy) {
   const tieredName = Scoring.strategyNames.tieredTrimmedBenchmark;
-  return strategy === 'tieredTrimmedBenchmark' || strategy === tieredName
+  const outlierName = Scoring.strategyNames.outlierFilteredBenchmark;
+  return strategy === 'tieredTrimmedBenchmark' || strategy === tieredName ||
+    strategy === 'outlierFilteredBenchmark' || strategy === outlierName
     ? Number(score).toFixed(2)
     : score;
+}
+function formatMobileBenchmarkCountDetails(bidder, strategy) {
+  if (bidder?.validBidCount == null) return '';
+  if (strategy === 'tieredTrimmedBenchmark') {
+    return `<br>有效${bidder.validBidCount}个，去最高和最低各${bidder.trimCount}个，纳入平均${bidder.includedBidCount}个`;
+  }
+  if (strategy === 'outlierFilteredBenchmark') {
+    return `<br>有效${bidder.validBidCount}个，剔除高价${bidder.excludedHighBidCount}个，纳入平均${bidder.includedBidCount}个`;
+  }
+  return '';
+}
+function formatMobileScenarioInclusion(detail, strategy) {
+  if (strategy === 'tieredTrimmedBenchmark') return `两端各${detail.trimCount} / ${detail.includedBidCount}个`;
+  if (strategy === 'outlierFilteredBenchmark') return `高价${detail.excludedHighBidCount} / ${detail.includedBidCount}个`;
+  return '—';
 }
 function fmtShort(n) {
   if (!n&&n!==0) return '-';

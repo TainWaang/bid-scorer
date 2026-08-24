@@ -36,6 +36,7 @@ function evaluatePrices(prices, overrides = {}) {
 const benchmarkCases = [
   { prices: [101, 103, 107, 109, 113], benchmark: 101.270000, trimCount: 0 },
   { prices: [101, 103, 107, 109, 113, 127], benchmark: 102.600000, trimCount: 1 },
+  { prices: [100, 200, 300, 400, 500, 600, 700, 800, 900], benchmark: 475.000000, trimCount: 1 },
   { prices: [101, 103, 107, 109, 113, 127, 131, 137, 139, 149], benchmark: 114.712500, trimCount: 1 },
   { prices: [101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 157], benchmark: 117.121429, trimCount: 2 },
 ];
@@ -45,7 +46,173 @@ for (const testCase of benchmarkCases) {
   assert.strictEqual(result[0].benchmark, testCase.benchmark);
   assert.strictEqual(result[0].trimCount, testCase.trimCount);
   assert.strictEqual(result[0].validBidCount, testCase.prices.length);
+  assert.strictEqual(result[0].includedBidCount, testCase.prices.length - testCase.trimCount * 2);
 }
+
+const formattedNine = evaluatePrices([
+  '1,000,000', '2，000，000', '3 000 000', '4,000,000', '5,000,000',
+  '6,000,000', '7,000,000', '8,000,000', '9,000,000',
+]);
+assert.strictEqual(formattedNine[0].validBidCount, 9);
+assert.strictEqual(formattedNine[0].trimCount, 1);
+assert.strictEqual(formattedNine[0].includedBidCount, 7);
+assert.strictEqual(formattedNine[0].benchmark, 4750000);
+
+const evaluatedFormattedNine = Scoring.evaluate(
+  bidders([
+    '1,000,000', '2,000,000', '3,000,000', '4,000,000', '5,000,000',
+    '6,000,000', '7,000,000', '8,000,000', '9,000,000',
+  ]),
+  {
+    businessWeight: 0,
+    priceWeight: 100,
+    techWeight: 0,
+    priceFull: 40,
+    priceStrategy: 'tieredTrimmedBenchmark',
+    strategyParams: params,
+  }
+);
+assert.strictEqual(evaluatedFormattedNine.length, 9);
+assert.strictEqual(evaluatedFormattedNine[0].validBidCount, 9);
+assert.strictEqual(evaluatedFormattedNine[0].includedBidCount, 7);
+
+const validitySummary = Scoring.summarizeBidValidity([
+  { name: '逗号格式', price: '4,500,000' },
+  { name: '人民币符号', price: '￥ 3 200 000' },
+  { name: '空值', price: '' },
+  { name: '格式错误', price: 'abc' },
+  { name: '零报价', price: 0 },
+]);
+assert.strictEqual(validitySummary.totalCount, 5);
+assert.strictEqual(validitySummary.validCount, 2);
+assert.strictEqual(validitySummary.invalidCount, 3);
+assert.deepStrictEqual(validitySummary.validBidders.map(bidder => bidder.price), [4500000, 3200000]);
+assert.deepStrictEqual(validitySummary.invalidBidders.map(bidder => bidder.name), ['空值', '格式错误', '零报价']);
+
+const outlierParams = {
+  outlierCutoffMultiple: 1.5,
+  outlierBenchmarkFactor: 0.95,
+  outlierHighDeduct: 0.8,
+  outlierLowDeduct: 0.3,
+  outlierMinScore: 0,
+  outlierDeviationDecimals: 2,
+  outlierSpecialFullScore: 1,
+};
+
+function evaluateOutlier(prices, overrides = {}, techScores = []) {
+  return Scoring.PriceStrategies.outlierFilteredBenchmark(
+    prices.map((price, index) => ({
+      id: String(index),
+      name: `报价样本${index + 1}`,
+      price,
+      techScore: techScores[index] ?? null,
+    })),
+    46,
+    { ...outlierParams, ...overrides }
+  );
+}
+
+// 等于初始均值的150%必须剔除；100、200的均值150，再乘0.95得到142.5。
+const equalityExcluded = evaluateOutlier([100, 200, 300]);
+assert.strictEqual(equalityExcluded[0].preliminaryAverage, 200);
+assert.strictEqual(equalityExcluded[0].exclusionThreshold, 300);
+assert.strictEqual(equalityExcluded[0].excludedHighBidCount, 1);
+assert.deepStrictEqual(equalityExcluded[0].excludedHighBidderNames, ['报价样本3']);
+assert.strictEqual(equalityExcluded[0].includedBidCount, 2);
+assert.strictEqual(equalityExcluded[0].benchmark, 142.5);
+assert.strictEqual(equalityExcluded[0].deviation, -29.82);
+assert.strictEqual(equalityExcluded[0].priceScore, 37.05);
+
+// 299低于阈值299.5，不能被边界条件误剔除。
+const justBelowThreshold = evaluateOutlier([100, 200, 299]);
+assert.strictEqual(justBelowThreshold[0].excludedHighBidCount, 0);
+assert.strictEqual(justBelowThreshold[0].includedBidCount, 3);
+
+// 偏差率必须先保留两位再计分，否则首项会得到45.01而不是45.02。
+const roundedDeviationFirst = evaluateOutlier(
+  [101.2349, 98.7651],
+  { outlierBenchmarkFactor: 1, outlierSpecialFullScore: 0 }
+);
+assert.strictEqual(roundedDeviationFirst[0].benchmark, 100);
+assert.strictEqual(roundedDeviationFirst[0].deviation, 1.23);
+assert.strictEqual(roundedDeviationFirst[0].priceScore, 45.02);
+
+const negativeHalfRoundsAwayFromZero = evaluateOutlier(
+  [101.235, 98.765],
+  { outlierBenchmarkFactor: 1, outlierSpecialFullScore: 0 }
+);
+assert.strictEqual(negativeHalfRoundsAwayFromZero[1].deviation, -1.24);
+assert.strictEqual(negativeHalfRoundsAwayFromZero[1].priceScore, 45.63);
+
+const zeroFloor = evaluateOutlier([100, 1000]);
+assert.strictEqual(zeroFloor[1].excludedHighBidCount, 1);
+assert.strictEqual(zeroFloor[1].priceScore, 0);
+
+const specialFullScore = evaluateOutlier([90, 100, 110], {}, [46, 40, 30]);
+assert.strictEqual(specialFullScore[0].specialFullScore, true);
+assert.strictEqual(specialFullScore[0].priceScore, 46);
+assert.strictEqual(specialFullScore[1].specialFullScore, false);
+
+const highestTechnicalButNotLowest = evaluateOutlier([90, 100, 110], {}, [40, 46, 30]);
+assert.strictEqual(highestTechnicalButNotLowest[0].specialFullScore, false);
+assert.strictEqual(highestTechnicalButNotLowest[1].specialFullScore, false);
+
+const noTechnicalDataOverride = evaluateOutlier([90, 100, 110]);
+assert.strictEqual(noTechnicalDataOverride[0].specialFullScore, false);
+assert.strictEqual(noTechnicalDataOverride[0].priceScore, 44.42);
+
+const invalidOutlierErrors = Scoring.validateStrategyConfig(
+  'outlierFilteredBenchmark',
+  46,
+  { ...outlierParams, outlierCutoffMultiple: 1, outlierMinScore: 47, outlierDeviationDecimals: 2.5 }
+);
+assert.deepStrictEqual(invalidOutlierErrors, [
+  '高价剔除阈值倍数必须大于1',
+  '最低分不能高于价格满分',
+  '偏差率小数位必须是0到10之间的整数',
+]);
+assert.throws(
+  () => evaluateOutlier([90, 100, 110], { outlierCutoffMultiple: 1 }),
+  /高价剔除阈值倍数必须大于1/
+);
+
+const evaluatedOutlierValidOnly = Scoring.evaluate(
+  [
+    { id: 'my', name: '目标方案', price: '90', businessScore: 80, techScore: 100, isMe: true },
+    { id: 'b1', name: '有效样本', price: '100', businessScore: 80, techScore: 90 },
+    { id: 'b2', name: '无效样本', price: 'abc', businessScore: 80, techScore: 80 },
+  ],
+  {
+    businessWeight: 8,
+    priceWeight: 46,
+    techWeight: 46,
+    priceFull: 46,
+    priceStrategy: 'outlierFilteredBenchmark',
+    strategyParams: outlierParams,
+  }
+);
+assert.strictEqual(evaluatedOutlierValidOnly.length, 2);
+assert.strictEqual(evaluatedOutlierValidOnly[0].validBidCount, 2);
+assert.strictEqual(evaluatedOutlierValidOnly.find(bidder => bidder.id === 'my').priceScore, 46);
+
+const outlierOptimization = Scoring.optimizePriceAcrossScenarios(
+  'my',
+  [{ name: '固定目标情景', bidders: [100, 200, 300] }],
+  {
+    businessWeight: 0,
+    priceWeight: 100,
+    techWeight: 0,
+    priceFull: 46,
+    priceStrategy: 'outlierFilteredBenchmark',
+    strategyParams: outlierParams,
+  },
+  { minPrice: 90, maxPrice: 90, step: 1 }
+);
+assert.strictEqual(outlierOptimization.best.details[0].participantCount, 4);
+assert.strictEqual(outlierOptimization.best.details[0].excludedHighBidCount, 1);
+assert.strictEqual(outlierOptimization.best.details[0].includedBidCount, 3);
+assert.strictEqual(outlierOptimization.best.details[0].benchmark, 123.5);
+assert.strictEqual(outlierOptimization.best.details[0].specialFullScore, false);
 
 const scoreCases = [
   { price: 100.6, expected: 34.70 },
@@ -67,6 +234,7 @@ for (const testCase of scoreCases) {
 const invalidExcluded = evaluatePrices([101, 103, 107, 109, 113, 127, 0]);
 assert.strictEqual(invalidExcluded[0].validBidCount, 6);
 assert.strictEqual(invalidExcluded[0].trimCount, 1);
+assert.strictEqual(invalidExcluded[0].includedBidCount, 4);
 
 const rankedValidOnly = Scoring.evaluate(
   bidders([101, 103, 107, 109, 113, 127, 0]),
@@ -150,6 +318,7 @@ assert.deepStrictEqual(multiScenario.candidates.map(candidate => candidate.price
 for (const candidate of multiScenario.candidates) {
   assert.deepStrictEqual(candidate.details.map(detail => detail.participantCount), [5, 10, 11, 16]);
   assert.deepStrictEqual(candidate.details.map(detail => detail.trimCount), [0, 1, 2, 2]);
+  assert.deepStrictEqual(candidate.details.map(detail => detail.includedBidCount), [5, 8, 7, 12]);
   assert.strictEqual(
     candidate.topRate,
     Scoring.round(candidate.details.filter(detail => detail.priceRank === 1).length / 4 * 100, 2)
