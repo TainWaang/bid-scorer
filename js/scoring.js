@@ -62,6 +62,37 @@ const Scoring = (() => {
     return errors;
   }
 
+  function validateComponentScoreConfig(config = {}, bidders = []) {
+    const errors = [];
+    const businessFull = Number(config.businessFull ?? 100);
+    const priceFull = Number(config.priceFull ?? 100);
+    const techFull = Number(config.techFull ?? 100);
+    if (!Number.isFinite(businessFull) || businessFull <= 0) errors.push('商务录入满分必须大于0');
+    if (!Number.isFinite(priceFull) || priceFull <= 0) errors.push('价格录入满分必须大于0');
+    if (!Number.isFinite(techFull) || techFull <= 0) errors.push('技术录入满分必须大于0');
+    if (errors.length > 0) return errors;
+
+    const scoreBidders = strategyFiltersInvalidBids(config.priceStrategy)
+      ? bidders.filter(bidder => normalizePriceInput(bidder.price) > 0)
+      : bidders;
+    for (const bidder of scoreBidders) {
+      const name = bidder.name || '未命名样本';
+      const businessScore = Number(bidder.businessScore ?? 0);
+      const techScore = Number(bidder.techScore ?? 0);
+      if (!Number.isFinite(businessScore) || businessScore < 0 || businessScore > businessFull) {
+        errors.push(`“${name}”商务得分必须在0到${businessFull}之间`);
+      }
+      if (!Number.isFinite(techScore) || techScore < 0 || techScore > techFull) {
+        errors.push(`“${name}”技术得分必须在0到${techFull}之间`);
+      }
+    }
+    return errors;
+  }
+
+  function strategyFiltersInvalidBids(strategy) {
+    return strategy === 'tieredTrimmedBenchmark' || strategy === 'outlierFilteredBenchmark';
+  }
+
   function roundHalfAwayFromZero(value, decimals) {
     const factor = 10 ** decimals;
     const scaled = Math.abs(Number(value)) * factor;
@@ -371,12 +402,14 @@ const Scoring = (() => {
    */
   function calcTotal(bidders, config) {
     const { businessWeight, priceWeight, techWeight } = config;
+    const businessFull = Number(config.businessFull) > 0 ? Number(config.businessFull) : 100;
     const priceFull = Number(config.priceFull) > 0 ? Number(config.priceFull) : 100;
+    const techFull = Number(config.techFull) > 0 ? Number(config.techFull) : 100;
     return bidders.map(b => {
       const total = round(
-        b.businessScore * businessWeight / 100 +
+        b.businessScore * businessWeight / businessFull +
         b.priceScore    * priceWeight    / priceFull +
-        b.techScore     * techWeight     / 100,
+        b.techScore     * techWeight     / techFull,
         4
       );
       return { ...b, total };
@@ -395,11 +428,13 @@ const Scoring = (() => {
    * 完整评分流程
    */
   function evaluate(bidders, config) {
+    const componentErrors = validateComponentScoreConfig(config, bidders);
+    if (componentErrors.length > 0) throw new Error(componentErrors.join('；'));
     const strategy = config.priceStrategy;
     const params   = config.strategyParams || {};
     const priceFull = config.priceFull ?? 100;
     const { normalizedBidders } = summarizeBidValidity(bidders);
-    const eligibleBidders = strategy === 'tieredTrimmedBenchmark' || strategy === 'outlierFilteredBenchmark'
+    const eligibleBidders = strategyFiltersInvalidBids(strategy)
       ? normalizedBidders.filter(b => b.price > 0)
       : normalizedBidders;
 
@@ -677,6 +712,7 @@ const Scoring = (() => {
     normalizePriceInput,
     summarizeBidValidity,
     validateStrategyConfig,
+    validateComponentScoreConfig,
     evaluate,
     findOptimalPrice,
     parsePriceScenarios,

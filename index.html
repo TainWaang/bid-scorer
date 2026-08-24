@@ -45,28 +45,36 @@
     </div>
 
     <div class="card">
-      <div class="card-title">评分权重设置
-        <span id="weight-sum" class="weight-sum err">权重合计：100%</span>
+      <div class="card-title">综合分值构成与录入满分
+        <span id="weight-sum" class="weight-sum err">分值合计：100</span>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>商务评分权重（%）</label>
+          <label>商务分值构成</label>
           <input type="number" id="cfg-bw" value="20" min="0" max="100" step="5">
         </div>
         <div class="form-group">
-          <label>价格评分权重（%）</label>
+          <label>价格分值构成</label>
           <input type="number" id="cfg-pw" value="40" min="0" max="100" step="5">
         </div>
         <div class="form-group">
-          <label>技术评分权重（%）</label>
+          <label>技术分值构成</label>
           <input type="number" id="cfg-tw" value="40" min="0" max="100" step="5">
         </div>
         <div class="form-group">
-          <label>价格分项满分</label>
+          <label>商务录入满分</label>
+          <input type="number" id="cfg-business-full" value="100" min="0.01" step="0.5">
+        </div>
+        <div class="form-group">
+          <label>价格录入满分</label>
           <input type="number" id="cfg-price-full" value="100" min="1" max="100" step="1">
         </div>
+        <div class="form-group">
+          <label>技术录入满分</label>
+          <input type="number" id="cfg-tech-full" value="100" min="0.01" step="0.5">
+        </div>
       </div>
-      <p class="note">三项权重之和必须等于100%；价格分项满分通常为100，也可按适用规则设置为其他值</p>
+      <p class="note">三项分值构成之和应为100。若直接录入分项原始得分，可将录入满分设为对应分值构成（例如8/46/46）；若录入百分制得分，则设为100。</p>
     </div>
 
     <div class="card">
@@ -126,8 +134,8 @@
               <th style="width:50px;">序号</th>
               <th style="width:120px;">名称</th>
               <th style="width:150px;">报价（元）</th>
-              <th style="width:110px;">商务得分<br><small>（满分100）</small></th>
-              <th style="width:110px;">技术得分<br><small>（满分100）</small></th>
+              <th style="width:110px;">商务得分<br><small id="bidder-business-full-label">（满分100）</small></th>
+              <th style="width:110px;">技术得分<br><small id="bidder-tech-full-label">（满分100）</small></th>
             </tr>
           </thead>
           <tbody id="bidder-tbody"></tbody>
@@ -271,11 +279,11 @@
             style="border-color:#2e6da4;background:#eff6ff;">
         </div>
         <div class="form-group">
-          <label>商务得分（预估）</label>
+          <label>商务得分（预估）<small id="scenario-business-full-label">（满分100）</small></label>
           <input type="number" id="scenario-my-biz" min="0" max="100" step="0.5" placeholder="0~100">
         </div>
         <div class="form-group">
-          <label>技术得分（预估）</label>
+          <label>技术得分（预估）<small id="scenario-tech-full-label">（满分100）</small></label>
           <input type="number" id="scenario-my-tech" min="0" max="100" step="0.5" placeholder="0~100">
         </div>
         <div style="display:flex;align-items:flex-end;gap:8px;">

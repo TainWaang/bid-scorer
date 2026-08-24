@@ -153,6 +153,7 @@
       width: 4px; height: 16px;
       background: var(--blue); border-radius: var(--radius-pill); flex-shrink: 0;
     }
+    .score-full-head { margin-top: 16px; }
 
     /* ── Form ── */
     .field { margin-bottom: 16px; min-width: 0; }
@@ -263,6 +264,7 @@
       text-align: center;
     }
     .score-field input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .score-field input.score-input-invalid { border-color: var(--red); background: var(--red-soft); }
 
     /* ── Result ── */
     .rank-card {
@@ -462,32 +464,48 @@
     <div class="page" id="page-0">
 
       <div class="card">
-        <div class="card-head">权重设置</div>
+        <div class="card-head">综合分值构成</div>
         <div class="field-row">
           <div class="field">
-            <label>商务评分 %</label>
+            <label>商务分值</label>
             <input type="number" id="m-bw" value="20" min="0" max="100" inputmode="numeric">
           </div>
           <div class="field">
-            <label>价格评分 %</label>
+            <label>价格分值</label>
             <input type="number" id="m-pw" value="40" min="0" max="100" inputmode="numeric">
           </div>
           <div class="field">
-            <label>技术评分 %</label>
+            <label>技术分值</label>
             <input type="number" id="m-tw" value="40" min="0" max="100" inputmode="numeric">
+          </div>
+        </div>
+        <div class="card-head score-full-head">录入满分</div>
+        <div class="field-row">
+          <div class="field">
+            <label>商务满分</label>
+            <input type="number" id="m-bf" value="100" min="0.01" step="0.5" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label>价格满分</label>
+            <input type="number" id="m-pf" value="100" min="0.01" step="0.5" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label>技术满分</label>
+            <input type="number" id="m-tf" value="100" min="0.01" step="0.5" inputmode="decimal">
           </div>
         </div>
         <div class="weight-bar">
           <div class="weight-fill" id="weight-fill"></div>
         </div>
         <div class="weight-labels">
-          <span id="wl-bw">商务 20%</span>
-          <span id="wl-pw">价格 40%</span>
-          <span id="wl-tw">技术 40%</span>
+          <span id="wl-bw">商务 20</span>
+          <span id="wl-pw">价格 40</span>
+          <span id="wl-tw">技术 40</span>
         </div>
         <div class="status-wrap">
-          <span class="tag-sum tag-ok" id="weight-tag">合计 100%</span>
+          <span class="tag-sum tag-ok" id="weight-tag">合计 100</span>
         </div>
+        <p class="note">分值构成合计应为100。直接录入分项原始得分时，将三个录入满分设为对应分值构成；使用百分制折算时可设为100。</p>
       </div>
 
       <div class="card">
@@ -671,7 +689,7 @@ const S = {
   page: 0,
   config: {
     businessWeight: 20, priceWeight: 40, techWeight: 40,
-    priceFull: 100,
+    businessFull: 100, priceFull: 100, techFull: 100,
     priceStrategy: 'averagePrice',
     strategyParams: { deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, outlierCutoffMultiple:1.5, outlierBenchmarkFactor:0.95, outlierHighDeduct:0.8, outlierLowDeduct:0.3, outlierMinScore:0, outlierDeviationDecimals:2, outlierFullScore:46, outlierSpecialFullScore:1, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1, tierHighThreshold:10, tierMidThreshold:5, tierHighTrim:2, tierMidTrim:1, benchmarkFactor:0.95, benchmarkDecimals:6, tierBaseScore:35, tierHighDeduct:0.5, tierLowAdd:0.5, tierMinScore:30, tierMaxScore:40 },
   },
@@ -698,7 +716,23 @@ function initWeightBindings() {
   ['m-bw','m-pw','m-tw'].forEach(id => {
     document.getElementById(id).addEventListener('input', updateWeights);
   });
+  ['m-bf','m-pf','m-tf'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateScoreFulls);
+  });
   updateWeights();
+  updateScoreFulls(false);
+}
+
+function updateScoreFulls(shouldRender = true) {
+  S.config.businessFull = +gi('m-bf').value;
+  S.config.priceFull = +gi('m-pf').value;
+  S.config.techFull = +gi('m-tf').value;
+  if (S.config.priceStrategy === 'tieredTrimmedBenchmark') {
+    S.config.strategyParams.tierMaxScore = S.config.priceFull;
+  } else if (S.config.priceStrategy === 'outlierFilteredBenchmark') {
+    S.config.strategyParams.outlierFullScore = S.config.priceFull;
+  }
+  if (shouldRender) renderBidders();
 }
 
 function updateWeights() {
@@ -709,12 +743,12 @@ function updateWeights() {
   S.config.priceWeight    = pw;
   S.config.techWeight     = tw;
   const sum = bw+pw+tw;
-  gi('wl-bw').textContent = `商务 ${bw}%`;
-  gi('wl-pw').textContent = `价格 ${pw}%`;
-  gi('wl-tw').textContent = `技术 ${tw}%`;
+  gi('wl-bw').textContent = `商务 ${bw}`;
+  gi('wl-pw').textContent = `价格 ${pw}`;
+  gi('wl-tw').textContent = `技术 ${tw}`;
   const tag = gi('weight-tag');
-  if (sum===100) { tag.textContent='合计 100% ✓'; tag.className='tag-sum tag-ok'; }
-  else { tag.textContent=`合计 ${sum}%（应为100）`; tag.className='tag-sum tag-err'; }
+  if (sum===100) { tag.textContent='合计 100 ✓'; tag.className='tag-sum tag-ok'; }
+  else { tag.textContent=`合计 ${sum}（应为100）`; tag.className='tag-sum tag-err'; }
   // bar
   gi('weight-fill').style.background = `linear-gradient(90deg,var(--blue) ${bw}%,var(--green) ${bw}% ${bw+pw}%,var(--orange) ${bw+pw}%)`;
 }
@@ -731,6 +765,7 @@ function initStrategyBinding() {
     } else if (previousComponentFullScore != null && S.config.priceFull === previousComponentFullScore) {
       S.config.priceFull = 100;
     }
+    gi('m-pf').value = S.config.priceFull;
     renderStrategyParams();
   });
   renderStrategyParams();
@@ -791,7 +826,7 @@ function renderStrategyParams() {
       <div class="field"><label>最低分</label><input type="number" data-key="outlierMinScore" value="${p.outlierMinScore ?? 0}" step="0.5" min="0" inputmode="decimal"></div>
       <div class="field"><label>偏差率小数位</label><input type="number" data-key="outlierDeviationDecimals" value="${p.outlierDeviationDecimals ?? 2}" step="1" min="0" max="10" inputmode="numeric"></div>
     </div>
-    <div class="field"><label>价格满分</label><input type="number" data-key="outlierFullScore" value="${p.outlierFullScore ?? 46}" step="0.5" min="0.5" inputmode="decimal"></div>`,
+    `,
     compositePrice: `<div class="field-row">
       <div class="field"><label>最低价权重</label><input type="number" data-key="weightLow" value="${p.weightLow}" step="0.05" min="0" max="1" inputmode="decimal"></div>
       <div class="field"><label>平均价权重</label><input type="number" data-key="weightAvg" value="${p.weightAvg}" step="0.05" min="0" max="1" inputmode="decimal"></div>
@@ -845,8 +880,10 @@ function renderStrategyParams() {
       S.config.strategyParams[el.dataset.key] = +el.value;
       if (el.dataset.key === 'tierMaxScore' && S.config.priceStrategy === 'tieredTrimmedBenchmark') {
         S.config.priceFull = +el.value || 40;
+        gi('m-pf').value = S.config.priceFull;
       } else if (el.dataset.key === 'outlierFullScore' && S.config.priceStrategy === 'outlierFilteredBenchmark') {
         S.config.priceFull = +el.value || 46;
+        gi('m-pf').value = S.config.priceFull;
       }
     });
   });
@@ -856,6 +893,8 @@ function renderStrategyParams() {
 function renderBidders() {
   const list = gi('bidder-list');
   list.innerHTML = '';
+  const businessFull = Number(S.config.businessFull);
+  const techFull = Number(S.config.techFull);
   S.bidders.forEach((b, idx) => {
     const div = document.createElement('div');
     div.className = 'bidder-card' + (b.isMe ? ' me' : '');
@@ -877,14 +916,16 @@ function renderBidders() {
       </div>
       <div class="scores-row">
         <div class="score-field">
-          <label>商务分</label>
-          <input type="number" value="${b.businessScore}" min="0" max="100" step="0.5" inputmode="decimal"
-            oninput="S.bidders[${idx}].businessScore=+this.value">
+          <label>商务分（满分${fmtDecimal(businessFull)}）</label>
+          <input type="number" value="${b.businessScore}" min="0" max="${businessFull}" step="0.5" inputmode="decimal"
+            class="${b.businessScore < 0 || b.businessScore > businessFull ? 'score-input-invalid' : ''}"
+            oninput="updateMobileBidderScore(${idx},'businessScore',this)">
         </div>
         <div class="score-field">
-          <label>技术分</label>
-          <input type="number" value="${b.techScore}" min="0" max="100" step="0.5" inputmode="decimal"
-            oninput="S.bidders[${idx}].techScore=+this.value">
+          <label>技术分（满分${fmtDecimal(techFull)}）</label>
+          <input type="number" value="${b.techScore}" min="0" max="${techFull}" step="0.5" inputmode="decimal"
+            class="${b.techScore < 0 || b.techScore > techFull ? 'score-input-invalid' : ''}"
+            oninput="updateMobileBidderScore(${idx},'techScore',this)">
         </div>
       </div>`;
     list.appendChild(div);
@@ -895,7 +936,7 @@ function renderBidders() {
 
 function addBidder() {
   const n = S.bidders.filter(b=>!b.isMe).length + 1;
-  S.bidders.push({ id:'b'+Date.now(), name:'其他样本'+('ABCDEFGH'[n-1]||n), price:0, businessScore:75, techScore:78, isMe:false });
+  S.bidders.push({ id:'b'+Date.now(), name:'其他样本'+('ABCDEFGH'[n-1]||n), price:0, businessScore:Scoring.round(Number(S.config.businessFull)*0.75,2), techScore:Scoring.round(Number(S.config.techFull)*0.78,2), isMe:false });
   renderBidders();
 }
 
@@ -917,16 +958,27 @@ function formatMobileBidderPrice(idx, input) {
   if (price > 0) input.value = fmt(price);
 }
 
+function updateMobileBidderScore(idx, field, input) {
+  const value = +input.value;
+  S.bidders[idx][field] = value;
+  const fullScore = field === 'businessScore'
+    ? Number(S.config.businessFull)
+    : Number(S.config.techFull);
+  input.classList.toggle('score-input-invalid', !Number.isFinite(value) || value < 0 || value > fullScore);
+}
+
 // ── Result ──
 function renderResult() {
   const config = buildConfig();
   const content = gi('result-content');
   const configErrors = Scoring.validateStrategyConfig(config.priceStrategy, config.priceFull, config.strategyParams);
-  if (configErrors.length > 0) {
-    content.innerHTML = `<div class="card"><p class="note error-note">${escapeHtml(configErrors.join('；'))}</p></div>`;
+  const bidders = S.bidders.map(b=>({...b}));
+  const componentErrors = Scoring.validateComponentScoreConfig(config, bidders);
+  const allErrors = [...configErrors, ...componentErrors];
+  if (allErrors.length > 0) {
+    content.innerHTML = `<div class="card"><p class="note error-note">${escapeHtml(allErrors.join('；'))}</p></div>`;
     return;
   }
-  const bidders = S.bidders.map(b=>({...b}));
   const bidValidity = Scoring.summarizeBidValidity(bidders);
   const result  = Scoring.evaluate(bidders, config);
   const me = result.find(b=>b.isMe);
@@ -992,7 +1044,8 @@ function renderResult() {
   });
 
   html += `<div class="note text-center">
-    权重：商务${config.businessWeight}% · 价格${config.priceWeight}% · 技术${config.techWeight}%<br>
+    分值构成：商务${config.businessWeight} · 价格${config.priceWeight} · 技术${config.techWeight}<br>
+    录入满分：商务${fmtDecimal(config.businessFull)} · 价格${fmtDecimal(config.priceFull)} · 技术${fmtDecimal(config.techFull)}<br>
     策略：${Scoring.strategyNames[config.priceStrategy]}
   </div>`;
 
@@ -1125,7 +1178,10 @@ function saveScenario() {
   const config = buildConfig();
   const myBidder = S.bidders.find(b=>b.isMe);
   if (!myBidder||!myBidder.price) { alert('请先填写目标报价'); return; }
-  const result = Scoring.evaluate(S.bidders.map(b=>({...b})), config);
+  const bidders = S.bidders.map(b=>({...b}));
+  const componentErrors = Scoring.validateComponentScoreConfig(config, bidders);
+  if (componentErrors.length > 0) { alert(componentErrors.join('；')); return; }
+  const result = Scoring.evaluate(bidders, config);
   const me = result.find(b=>b.isMe);
   const name = gi('m-scenario-name').value || `方案${S.scenarios.length+1}`;
   S.scenarios.push({
@@ -1184,24 +1240,31 @@ function removeScenario(idx) {
 // ── Presets ──
 function loadPreset(name) {
   const presets = {
-    gov:    { businessWeight:20, priceWeight:40, techWeight:40, priceStrategy:'averagePrice',    label:'通用评分模板' },
-    infra:  { businessWeight:10, priceWeight:60, techWeight:30, priceStrategy:'compositePrice',  label:'价格权重较高模板' },
-    tech:   { businessWeight:15, priceWeight:30, techWeight:55, priceStrategy:'lowestPrice',     label:'技术权重较高模板' },
-    lowest: { businessWeight:20, priceWeight:50, techWeight:30, priceStrategy:'lowestPrice',     label:'价格优先模板' },
+    gov:    { businessWeight:20, priceWeight:40, techWeight:40, businessFull:100, priceFull:100, techFull:100, priceStrategy:'averagePrice',    label:'通用评分模板' },
+    infra:  { businessWeight:10, priceWeight:60, techWeight:30, businessFull:100, priceFull:100, techFull:100, priceStrategy:'compositePrice',  label:'价格权重较高模板' },
+    tech:   { businessWeight:15, priceWeight:30, techWeight:55, businessFull:100, priceFull:100, techFull:100, priceStrategy:'lowestPrice',     label:'技术权重较高模板' },
+    lowest: { businessWeight:20, priceWeight:50, techWeight:30, businessFull:100, priceFull:100, techFull:100, priceStrategy:'lowestPrice',     label:'价格优先模板' },
   };
   const p = presets[name]; if (!p) return;
   S.config.businessWeight = p.businessWeight;
   S.config.priceWeight    = p.priceWeight;
   S.config.techWeight     = p.techWeight;
+  S.config.businessFull   = p.businessFull ?? 100;
   S.config.priceStrategy  = p.priceStrategy;
   S.config.priceFull      = p.priceFull ?? 100;
+  S.config.techFull       = p.techFull ?? 100;
   S.config.strategyParams = { ...S.config.strategyParams, ...(p.strategyParams || {}) };
   gi('m-bw').value = p.businessWeight;
   gi('m-pw').value = p.priceWeight;
   gi('m-tw').value = p.techWeight;
+  gi('m-bf').value = S.config.businessFull;
+  gi('m-pf').value = S.config.priceFull;
+  gi('m-tf').value = S.config.techFull;
   gi('m-strategy').value = p.priceStrategy;
   updateWeights();
+  updateScoreFulls(false);
   renderStrategyParams();
+  renderBidders();
 }
 
 // ── Quick Calc ──

@@ -358,7 +358,8 @@ tr.rank-1 td:first-child::after {
   font-weight: 700;
 }
 
-.price-input-invalid {
+.price-input-invalid,
+.score-input-invalid {
   border-color: #dc2626 !important;
   background: #fef2f2 !important;
 }

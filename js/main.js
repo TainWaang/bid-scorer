@@ -11,7 +11,9 @@ const State = {
     businessWeight: 20,
     priceWeight: 40,
     techWeight: 40,
+    businessFull: 100,
     priceFull: 100,       // 价格满分（通常=100，也可按适用规则调整）
+    techFull: 100,
     priceStrategy: 'averagePrice',
     strategyParams: {
       deductHigh: 0.5,
@@ -150,9 +152,37 @@ function syncConfigFromState() {
   v('cfg-bw', c.businessWeight);
   v('cfg-pw', c.priceWeight);
   v('cfg-tw', c.techWeight);
+  v('cfg-business-full', c.businessFull);
   v('cfg-price-full', c.priceFull);
+  v('cfg-tech-full', c.techFull);
   v('cfg-strategy', c.priceStrategy);
   updateWeightSum();
+  syncScoreFullUI();
+}
+
+function syncScoreFullUI() {
+  const businessFull = Number(State.config.businessFull);
+  const techFull = Number(State.config.techFull);
+  const businessLabel = gi('bidder-business-full-label');
+  const techLabel = gi('bidder-tech-full-label');
+  if (businessLabel) businessLabel.textContent = `（满分${fmt(businessFull)}）`;
+  if (techLabel) techLabel.textContent = `（满分${fmt(techFull)}）`;
+  const scenarioBusinessLabel = gi('scenario-business-full-label');
+  const scenarioTechLabel = gi('scenario-tech-full-label');
+  if (scenarioBusinessLabel) scenarioBusinessLabel.textContent = `（满分${fmt(businessFull)}）`;
+  if (scenarioTechLabel) scenarioTechLabel.textContent = `（满分${fmt(techFull)}）`;
+  const scenarioBusiness = gi('scenario-my-biz');
+  const scenarioTech = gi('scenario-my-tech');
+  if (scenarioBusiness) {
+    scenarioBusiness.max = businessFull;
+    scenarioBusiness.placeholder = `0~${fmt(businessFull)}`;
+    scenarioBusiness.classList.toggle('score-input-invalid', +scenarioBusiness.value < 0 || +scenarioBusiness.value > businessFull);
+  }
+  if (scenarioTech) {
+    scenarioTech.max = techFull;
+    scenarioTech.placeholder = `0~${fmt(techFull)}`;
+    scenarioTech.classList.toggle('score-input-invalid', +scenarioTech.value < 0 || +scenarioTech.value > techFull);
+  }
 }
 
 function bindConfigEvents() {
@@ -163,6 +193,14 @@ function bindConfigEvents() {
     });
   });
   gi('cfg-project').addEventListener('input', () => { State.config.projectName = gi('cfg-project').value; saveState(); });
+  ['cfg-business-full', 'cfg-tech-full'].forEach(id => {
+    gi(id).addEventListener('input', () => {
+      State.config[id === 'cfg-business-full' ? 'businessFull' : 'techFull'] = +gi(id).value;
+      syncScoreFullUI();
+      renderBidderTable();
+      saveState();
+    });
+  });
   gi('cfg-price-full').addEventListener('input', () => {
     State.config.priceFull = +gi('cfg-price-full').value || 100;
     if (State.config.priceStrategy === 'tieredTrimmedBenchmark') {
@@ -206,7 +244,7 @@ function autoBalanceWeights(changedId) {
 function updateWeightSum() {
   const sum = State.config.businessWeight + State.config.priceWeight + State.config.techWeight;
   const el = gi('weight-sum');
-  el.textContent = `权重合计：${sum}%`;
+  el.textContent = `分值合计：${sum}`;
   el.className = 'weight-sum ' + (sum === 100 ? 'ok' : 'err');
 }
 
@@ -397,7 +435,10 @@ function renderBidderNamesPanel() {
 function renderBidderTable() {
   const tbody = gi('bidder-tbody');
   if (!tbody) return;
+  syncScoreFullUI();
   tbody.innerHTML = '';
+  const businessFull = Number(State.config.businessFull);
+  const techFull = Number(State.config.techFull);
   State.bidders.forEach((b, idx) => {
     const tr = document.createElement('tr');
     if (b.isMe) tr.classList.add('my-row');
@@ -409,12 +450,14 @@ function renderBidderTable() {
           style="width:130px;padding:4px 6px;border:1px solid ${b.isMe ? '#2e6da4' : '#d1d5db'};border-radius:4px;${b.isMe ? 'background:#eff6ff;' : ''}"
           oninput="updateBidderPriceInput(${idx},this)"
           onblur="formatBidderPriceInput(${idx},this)"></td>
-      <td><input type="number" value="${b.businessScore}" min="0" max="100" step="0.1"
+      <td><input type="number" value="${b.businessScore}" min="0" max="${businessFull}" step="0.1"
+          class="${b.businessScore < 0 || b.businessScore > businessFull ? 'score-input-invalid' : ''}"
           style="width:80px;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;"
-          oninput="updateBidder(${idx},'businessScore',+this.value)"></td>
-      <td><input type="number" value="${b.techScore}" min="0" max="100" step="0.1"
+          oninput="updateBidderScore(${idx},'businessScore',this)"></td>
+      <td><input type="number" value="${b.techScore}" min="0" max="${techFull}" step="0.1"
+          class="${b.techScore < 0 || b.techScore > techFull ? 'score-input-invalid' : ''}"
           style="width:80px;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;"
-          oninput="updateBidder(${idx},'techScore',+this.value)"></td>
+          oninput="updateBidderScore(${idx},'techScore',this)"></td>
     `;
     tbody.appendChild(tr);
   });
@@ -426,8 +469,8 @@ function addBidder() {
     id: 'b' + Date.now(),
     name: '其他样本' + String.fromCharCode(64 + idx),
     price: 0,
-    businessScore: 75,
-    techScore: 78,
+    businessScore: Scoring.round(Number(State.config.businessFull) * 0.75, 2),
+    techScore: Scoring.round(Number(State.config.techFull) * 0.78, 2),
     isMe: false,
   });
   renderBidderNamesPanel();
@@ -448,6 +491,16 @@ function updateBidder(idx, field, value) {
   if (field === 'price') {
     renderPredictTable();
   }
+  saveState();
+}
+
+function updateBidderScore(idx, field, input) {
+  const value = +input.value;
+  State.bidders[idx][field] = value;
+  const fullScore = field === 'businessScore'
+    ? Number(State.config.businessFull)
+    : Number(State.config.techFull);
+  input.classList.toggle('score-input-invalid', !Number.isFinite(value) || value < 0 || value > fullScore);
   saveState();
 }
 
@@ -478,12 +531,12 @@ function updateBidderPriceById(id, value) {
 // ========================
 function renderResult() {
   const config = buildConfig();
-  if (!validateConfig(config)) return;
+  const bidders = State.bidders.map(b => ({ ...b }));
+  if (!validateConfig(config, bidders)) return;
 
   const resultArea = gi('result-area');
   if (resultArea) resultArea.style.display = '';
 
-  const bidders = State.bidders.map(b => ({ ...b }));
   const bidValidity = Scoring.summarizeBidValidity(bidders);
   const result  = Scoring.evaluate(bidders, config);
 
@@ -520,7 +573,7 @@ function renderResult() {
     <div class="summary-card">
       <div class="label">目标方案综合得分</div>
       <div class="value">${me ? me.total.toFixed(4) : '-'}</div>
-      <div class="sub">满分100分</div>
+      <div class="sub">满分${config.businessWeight + config.priceWeight + config.techWeight}分</div>
     </div>
     <div class="summary-card">
       <div class="label">目标方案价格得分</div>
@@ -541,8 +594,8 @@ function renderResult() {
       <th>排名</th><th>报价样本</th><th>报价（元）</th>
       <th>与基准价偏差</th>
       <th>价格得分<br><small>（满分${config.priceFull}）</small></th>
-      <th>商务得分<br><small>（满分100）</small></th>
-      <th>技术得分<br><small>（满分100）</small></th>
+      <th>商务得分<br><small>（满分${fmt(config.businessFull)}）</small></th>
+      <th>技术得分<br><small>（满分${fmt(config.techFull)}）</small></th>
       <th>综合得分</th>
     </tr>`;
 
@@ -563,7 +616,7 @@ function renderResult() {
 
   // 权重提示
   gi('result-weight-info').textContent =
-    `评分权重：商务${config.businessWeight}% + 价格${config.priceWeight}% + 技术${config.techWeight}%  |  价格策略：${Scoring.strategyNames[config.priceStrategy]}`;
+    `分值构成：商务${config.businessWeight} + 价格${config.priceWeight} + 技术${config.techWeight}；录入满分：商务${fmt(config.businessFull)} / 价格${fmt(config.priceFull)} / 技术${fmt(config.techFull)}  |  价格策略：${Scoring.strategyNames[config.priceStrategy]}`;
 }
 
 // ========================
@@ -801,6 +854,7 @@ function renderOptimize() {
 // 方案对比面板
 // ========================
 function initScenarioPanel() {
+  syncScoreFullUI();
   gi('btn-save-scenario').addEventListener('click', saveScenario);
   gi('btn-clear-scenarios').addEventListener('click', () => {
     if (confirm('确定清空所有方案？')) {
@@ -834,6 +888,7 @@ function saveScenario() {
     { id: 'my', name: '目标方案', price: myPrice, businessScore: myBiz, techScore: myTech, isMe: true },
     ...State.bidders.filter(b => !b.isMe).map(b => ({ ...b })),
   ];
+  if (!validateConfig(config, bidders)) return;
   const result = Scoring.evaluate(bidders, config);
   const me = result.find(b => b.isMe);
 
@@ -903,14 +958,16 @@ function buildConfig() {
     businessWeight: State.config.businessWeight,
     priceWeight:    State.config.priceWeight,
     techWeight:     State.config.techWeight,
+    businessFull:   State.config.businessFull,
     priceFull:      State.config.priceFull,
+    techFull:       State.config.techFull,
     priceStrategy:  State.config.priceStrategy,
     strategyParams: { ...State.config.strategyParams },
     myBidderId:     'my',
   };
 }
 
-function validateConfig(config) {
+function validateConfig(config, bidders = []) {
   const strategyErrors = Scoring.validateStrategyConfig(
     config.priceStrategy,
     config.priceFull,
@@ -918,6 +975,11 @@ function validateConfig(config) {
   );
   if (strategyErrors.length > 0) {
     alert(strategyErrors.join('；'));
+    return false;
+  }
+  const componentErrors = Scoring.validateComponentScoreConfig(config, bidders);
+  if (componentErrors.length > 0) {
+    alert(componentErrors.join('；'));
     return false;
   }
   const sum = config.businessWeight + config.priceWeight + config.techWeight;
@@ -971,24 +1033,28 @@ function loadPreset(name) {
   const presets = {
     gov: {
       businessWeight: 20, priceWeight: 40, techWeight: 40,
+      businessFull: 100, priceFull: 100, techFull: 100,
       priceStrategy: 'averagePrice',
       strategyParams: { avgBaseScore: 80, avgLowAdd: 1, avgHighDeduct: 1, avgMaxScore: 100, avgMinScore: 0 },
       label: '通用评分模板（商务20/价格40/技术40）'
     },
     infra: {
       businessWeight: 10, priceWeight: 60, techWeight: 30,
+      businessFull: 100, priceFull: 100, techFull: 100,
       priceStrategy: 'compositePrice',
       strategyParams: { weightLow: 0.5, weightAvg: 0.5, deductHigh: 1, deductLow: 0.5 },
       label: '价格权重较高模板（商务10/价格60/技术30）'
     },
     tech: {
       businessWeight: 15, priceWeight: 30, techWeight: 55,
+      businessFull: 100, priceFull: 100, techFull: 100,
       priceStrategy: 'lowestPrice',
       strategyParams: {},
       label: '技术权重较高模板（商务15/价格30/技术55）'
     },
     lowest: {
       businessWeight: 20, priceWeight: 50, techWeight: 30,
+      businessFull: 100, priceFull: 100, techFull: 100,
       priceStrategy: 'lowestPrice',
       strategyParams: {},
       label: '价格优先模板（商务20/价格50/技术30）'
@@ -1001,8 +1067,10 @@ function loadPreset(name) {
   State.config.businessWeight  = preset.businessWeight;
   State.config.priceWeight     = preset.priceWeight;
   State.config.techWeight      = preset.techWeight;
+  State.config.businessFull    = preset.businessFull ?? 100;
   State.config.priceStrategy   = preset.priceStrategy;
   State.config.priceFull       = preset.priceFull ?? 100;
+  State.config.techFull        = preset.techFull ?? 100;
   State.config.strategyParams  = { ...State.config.strategyParams, ...preset.strategyParams };
 
   syncConfigFromState();

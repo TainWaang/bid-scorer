@@ -278,6 +278,68 @@ const defaultScale = Scoring.evaluate(
 assert.strictEqual(defaultScale.priceScore, 80);
 assert.strictEqual(defaultScale.total, 80);
 
+const directComponentScores = Scoring.evaluate(
+  [{ id: 'my', name: '目标方案', price: 100, businessScore: 8, techScore: 43.7, isMe: true }],
+  {
+    businessWeight: 8,
+    priceWeight: 46,
+    techWeight: 46,
+    businessFull: 8,
+    priceFull: 46,
+    techFull: 46,
+    priceStrategy: 'fixedBenchmark',
+    strategyParams: { benchmark: 100, deductHigh: 0, deductLow: 0 },
+  }
+)[0];
+assert.strictEqual(directComponentScores.priceScore, 46);
+assert.strictEqual(directComponentScores.total, 97.7);
+
+const normalizedComponentScores = Scoring.evaluate(
+  [{ id: 'my', name: '目标方案', price: 100, businessScore: 100, techScore: 95, isMe: true }],
+  {
+    businessWeight: 8,
+    priceWeight: 46,
+    techWeight: 46,
+    businessFull: 100,
+    priceFull: 46,
+    techFull: 100,
+    priceStrategy: 'fixedBenchmark',
+    strategyParams: { benchmark: 100, deductHigh: 0, deductLow: 0 },
+  }
+)[0];
+assert.strictEqual(normalizedComponentScores.total, directComponentScores.total);
+
+const componentRangeErrors = Scoring.validateComponentScoreConfig(
+  { businessFull: 8, priceFull: 46, techFull: 46 },
+  [{ name: '超分样本', businessScore: 9, techScore: 47 }]
+);
+assert.deepStrictEqual(componentRangeErrors, [
+  '“超分样本”商务得分必须在0到8之间',
+  '“超分样本”技术得分必须在0到46之间',
+]);
+assert.deepStrictEqual(
+  Scoring.validateComponentScoreConfig(
+    { businessFull: 8, priceFull: 46, techFull: 46, priceStrategy: 'outlierFilteredBenchmark' },
+    [{ name: '未报价占位样本', price: 0, businessScore: 100, techScore: 100 }]
+  ),
+  []
+);
+assert.deepStrictEqual(
+  Scoring.validateComponentScoreConfig({ businessFull: 0, priceFull: 46, techFull: -1 }, []),
+  ['商务录入满分必须大于0', '技术录入满分必须大于0']
+);
+assert.throws(
+  () => Scoring.evaluate(
+    [{ name: '超分样本', price: 100, businessScore: 9, techScore: 47 }],
+    {
+      businessWeight: 8, priceWeight: 46, techWeight: 46,
+      businessFull: 8, priceFull: 46, techFull: 46,
+      priceStrategy: 'fixedBenchmark', strategyParams: { benchmark: 100 },
+    }
+  ),
+  /商务得分必须在0到8之间.*技术得分必须在0到46之间/
+);
+
 const optimizationConfig = {
   businessWeight: 0,
   priceWeight: 100,
