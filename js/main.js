@@ -59,54 +59,16 @@ const State = {
   ],
   scenarios: [],      // 方案对比
   predictPrices: {},  // 预测模拟报价 { bidderId: price }
+  predictSort: { key: 'priceRank', direction: 'asc' },
+  predictResult: null,
 };
 
-const STORAGE_KEY = 'bid-scorer-desktop-state-v1';
-
 function loadSavedState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    if (saved.config) {
-      State.config = {
-        ...State.config,
-        ...saved.config,
-        strategyParams: {
-          ...State.config.strategyParams,
-          ...(saved.config.strategyParams || {}),
-        },
-      };
-    }
-    if (Array.isArray(saved.bidders) && saved.bidders.length > 0) {
-      State.bidders = saved.bidders.map((b, idx) => ({
-        id: b.id || (idx === 0 ? 'my' : 'b' + Date.now() + idx),
-        name: b.name || (idx === 0 ? '目标方案' : '其他样本' + idx),
-        price: +b.price || 0,
-        businessScore: +b.businessScore || 0,
-        techScore: +b.techScore || 0,
-        isMe: idx === 0 ? true : !!b.isMe,
-      }));
-      if (!State.bidders.some(b => b.isMe)) State.bidders[0].isMe = true;
-    }
-    if (Array.isArray(saved.scenarios)) State.scenarios = saved.scenarios;
-    State.predictPrices = {};
-  } catch (err) {
-    console.warn('读取本地保存失败，已使用默认数据', err);
-  }
+  WorkspaceUI.load(State);
 }
 
 function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      config: State.config,
-      bidders: State.bidders,
-      scenarios: State.scenarios,
-      savedAt: new Date().toISOString(),
-    }));
-  } catch (err) {
-    console.warn('本地保存失败', err);
-  }
+  WorkspaceUI.save();
 }
 
 // ========================
@@ -120,7 +82,7 @@ function initTabs() {
       btn.classList.add('active');
       document.getElementById(btn.dataset.tab).classList.add('active');
       if (btn.dataset.tab === 'tab-result') renderResult();
-      if (btn.dataset.tab === 'tab-optimize') renderOptimize();
+      if (btn.dataset.tab === 'tab-optimize') { renderPredictTable(); renderOptimizeTargetOptions(); }
     });
   });
 }
@@ -202,7 +164,7 @@ function bindConfigEvents() {
     });
   });
   gi('cfg-price-full').addEventListener('input', () => {
-    State.config.priceFull = +gi('cfg-price-full').value || 100;
+    State.config.priceFull = +gi('cfg-price-full').value;
     if (State.config.priceStrategy === 'tieredTrimmedBenchmark') {
       State.config.strategyParams.tierMaxScore = State.config.priceFull;
       const tierMaxInput = gi('sp-tierMaxScore');
@@ -508,6 +470,7 @@ function updateBidderPriceInput(idx, input) {
   const rawValue = input.value;
   const price = Scoring.normalizePriceInput(rawValue);
   State.bidders[idx].price = price;
+  State.bidders[idx].priceInputError = rawValue.trim() !== '' && price <= 0;
   input.classList.toggle('price-input-invalid', rawValue.trim() !== '' && price <= 0);
   renderPredictTable();
   saveState();
@@ -522,6 +485,7 @@ function updateBidderPriceById(id, value) {
   const bidder = State.bidders.find(b => b.id === id);
   if (!bidder) return;
   bidder.price = Scoring.normalizePriceInput(value);
+  bidder.priceInputError = String(value).trim() !== '' && bidder.price <= 0;
   renderBidderTable();
   saveState();
 }
@@ -538,7 +502,10 @@ function renderResult() {
   if (resultArea) resultArea.style.display = '';
 
   const bidValidity = Scoring.summarizeBidValidity(bidders);
-  const result  = Scoring.evaluate(bidders, config);
+  let result;
+  try { result = Scoring.evaluate(bidders, config); }
+  catch(error) { gi('result-bid-status').textContent=error.message;return; }
+  WorkspaceUI.fresh('result-area');
 
   const me = result.find(b => b.isMe);
   const invalidNames = bidValidity.invalidBidders
@@ -554,13 +521,9 @@ function renderResult() {
     const excludedNamesText = excludedNames ? `（${excludedNames}）` : '';
     countDetailText = ` 初始均值¥${fmt(result[0].preliminaryAverage)}，达到¥${fmt(result[0].exclusionThreshold)}的${result[0].excludedHighBidCount}个高价${excludedNamesText}不参与基准价计算，最终纳入${result[0].includedBidCount}个报价。`;
   }
-  const filtersInvalidBidders = config.priceStrategy === 'tieredTrimmedBenchmark' ||
-    config.priceStrategy === 'outlierFilteredBenchmark';
-  const invalidImpactText = filtersInvalidBidders
-    ? '未进入本次评分及基准价计算'
-    : '报价未进入价格基准计算';
+  const invalidImpactText = '未进入本次评分及基准价计算';
   status.innerHTML = bidValidity.invalidCount
-    ? `<strong>已建立${bidValidity.totalCount}个样本，有效${bidValidity.validCount}个。</strong>${invalidImpactText}：${invalidNames}（报价为空、为0或格式无效）。${countDetailText}`
+    ? `<strong>已建立${bidValidity.totalCount}个样本，有效${bidValidity.validCount}个。</strong>${invalidImpactText}：${invalidNames}（未报价或已停用）。${countDetailText}`
     : `<strong>已建立${bidValidity.totalCount}个样本，${bidValidity.validCount}个报价全部有效。</strong>${countDetailText}`;
 
   // 摘要
@@ -586,12 +549,12 @@ function renderResult() {
       <div class="sub">偏差 ${me.deviation ?? '-'}%${formatBenchmarkCountDetails(me, config.priceStrategy)}</div>
     </div>` : ''}
   `;
-  gi('result-summary').innerHTML = sumHtml;
+  gi('result-summary').innerHTML = sumHtml + WorkspaceUI.trace(result) + WorkspaceUI.resultTools(result);
 
   // 明细表格
   const theadHtml = `
     <tr>
-      <th>排名</th><th>报价样本</th><th>报价（元）</th>
+      <th>综合排名</th><th>报价样本</th><th>报价（元）</th><th>价格排名</th>
       <th>与基准价偏差</th>
       <th>价格得分<br><small>（满分${config.priceFull}）</small></th>
       <th>商务得分<br><small>（满分${fmt(config.businessFull)}）</small></th>
@@ -599,11 +562,12 @@ function renderResult() {
       <th>综合得分</th>
     </tr>`;
 
-  const tbodyHtml = result.map(b => `
-    <tr class="${b.isMe ? 'my-row' : ''} ${b.rank === 1 ? 'rank-1' : ''}">
-      <td><strong>${b.rank}</strong></td>
+  const tbodyHtml = WorkspaceUI.sortedResults(result).map(b => `
+    <tr ${b.isMe?'data-result-target':''} class="${b.isMe ? 'my-row' : ''} ${b.rank === 1 ? 'rank-1' : ''}">
+      <td><strong>${b.rank}${b.tied?'（并列）':''}</strong></td>
       <td>${escapeHtml(b.name)}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
       <td>${fmt(b.price)}</td>
+      <td>${b.priceRank}${b.priceTied?'（并列）':''}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
       <td>${fmtPriceScore(b.priceScore, config.priceStrategy)}${b.specialFullScore ? '<br><small class="score-reason">技术最高且最低价满分</small>' : ''}</td>
       <td>${b.businessScore}</td>
@@ -668,13 +632,10 @@ function calcPredictResult() {
     gi('predict-result-box').innerHTML = `<p class="note" style="color:#dc2626;">${escapeHtml(configErrors.join('；'))}</p>`;
     return;
   }
-  const priceResult = Scoring.PriceStrategies[strategy]
-    ? Scoring.PriceStrategies[strategy](bidders, config.priceFull, config.strategyParams)
-    : Scoring.PriceStrategies.lowestPrice(bidders, config.priceFull, config.strategyParams);
-
-  const sorted = [...priceResult].sort((a, b) => b.priceScore - a.priceScore);
-  sorted.forEach((b, i) => { b.priceRank = i + 1; });
-  const ranked = priceResult.map(b => sorted.find(s => s.id === b.id));
+  let ranked;
+  try { ranked = Scoring.evaluatePrice(bidders, config); }
+  catch(error) { gi('predict-result-box').textContent=error.message;return; }
+  WorkspaceUI.fresh('predict-result-box');
 
   const benchmark = ranked.find(b => b.benchmark)?.benchmark;
   const benchmarkHtml = benchmark
@@ -683,23 +644,60 @@ function calcPredictResult() {
        </p>`
     : `<p style="font-size:12px;color:#666;margin-bottom:8px;">价格策略：${Scoring.strategyNames[strategy]}</p>`;
 
+  State.predictResult = {
+    rows: ranked,
+    benchmarkHtml,
+    strategy,
+    priceFull: config.priceFull,
+  };
+  renderPredictResultTable();
+}
+
+function sortPredictResult(key) {
+  if (!State.predictResult) return;
+  if (State.predictSort.key === key) {
+    State.predictSort.direction = State.predictSort.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    State.predictSort = { key, direction: 'asc' };
+  }
+  renderPredictResultTable();
+}
+
+function renderPredictResultTable() {
+  const snapshot = State.predictResult;
+  if (!snapshot) return;
+  const { key, direction } = State.predictSort;
+  const rows = Scoring.sortPriceResults(snapshot.rows, key, direction);
+  const sortLabel = key === 'priceRank'
+    ? `价格排名（${direction === 'asc' ? '第1名优先' : '末位优先'}）`
+    : `报价${direction === 'asc' ? '从低到高' : '从高到低'}`;
+  const sortIcon = column => key === column ? (direction === 'asc' ? '↑' : '↓') : '↕';
+  const activeClass = column => key === column ? ' active' : '';
+  const ariaSort = column => key === column ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
   const theadHtml = `<tr>
-    <th>价格排名</th><th>报价样本</th><th>假设报价（元）</th>
+    <th aria-sort="${ariaSort('priceRank')}"><button type="button" class="table-sort-btn${activeClass('priceRank')}" onclick="sortPredictResult('priceRank')" aria-label="按价格排名排序">价格排名 <span>${sortIcon('priceRank')}</span></button></th>
+    <th>报价样本</th>
+    <th aria-sort="${ariaSort('price')}"><button type="button" class="table-sort-btn${activeClass('price')}" onclick="sortPredictResult('price')" aria-label="按假设报价排序">假设报价（元） <span>${sortIcon('price')}</span></button></th>
     <th>与基准价偏差</th>
-    <th>价格得分（满分${config.priceFull}）</th>
+    <th>价格得分（满分${snapshot.priceFull}）</th>
   </tr>`;
 
-  const tbodyHtml = ranked.map(b => `
+  const tbodyHtml = rows.map(b => `
     <tr class="${b.isMe ? 'my-row' : ''} ${b.priceRank === 1 ? 'rank-1' : ''}">
-      <td><strong>${b.priceRank}</strong></td>
+      <td><strong>${b.priceRank}${b.priceTied?'（并列）':''}</strong></td>
       <td>${escapeHtml(b.name)}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
       <td>${b.price > 0 ? '¥ ' + fmt(b.price) : '<span style="color:#bbb;">未填</span>'}</td>
       <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
-      <td><strong>${fmtPriceScore(b.priceScore, strategy)}</strong>${b.specialFullScore ? '<br><small class="score-reason">技术最高且最低价满分</small>' : ''}</td>
+      <td><strong>${fmtPriceScore(b.priceScore, snapshot.strategy)}</strong>${b.specialFullScore ? '<br><small class="score-reason">技术最高且最低价满分</small>' : ''}</td>
     </tr>`).join('');
 
   gi('predict-result-box').innerHTML = `
-    ${benchmarkHtml}
+    <div class="predict-result-head">
+      <div>${snapshot.benchmarkHtml}</div>
+      <div class="predict-sort-status">当前排序：${sortLabel}；点击表头可切换</div>
+    </div>
+    ${WorkspaceUI.trace(snapshot.rows)}
+    <p class="note">参与价格排名${snapshot.rows.length}个；空报价、禁用或错误报价不进入排名。</p>
     <div class="table-wrap">
       <table>
         <thead>${theadHtml}</thead>
@@ -741,20 +739,22 @@ function sampleOptimizationCandidates(candidates, best, maxRows = 25) {
   return sampled.sort((left, right) => left.price - right.price);
 }
 
-function renderOptimize() {
+async function renderOptimize() {
   renderPredictTable();
   renderOptimizeTargetOptions();
 
   const config = buildConfig();
-  if (!validateConfig(config)) return;
+  const configErrors=Scoring.validateConfig(config, [], true);
+  if(configErrors.length){gi('optimize-result-box').textContent=configErrors.join('；');return;}
 
   const targetBidder = State.bidders.find(bidder => bidder.id === gi('opt-target').value);
   if (!targetBidder) return;
 
-  const others = State.bidders.filter(bidder => bidder.id !== targetBidder.id && bidder.price > 0);
+  const others = State.bidders.filter(bidder => bidder.id !== targetBidder.id && bidder.price > 0 && bidder.enabled !== false);
   let scenarios;
   try {
-    scenarios = Scoring.parsePriceScenarios(gi('opt-scenarios').value, others);
+    scenarios = WorkspaceUI.scenarios(gi('opt-scenarios').value, others);
+    if(!scenarios.length || scenarios.some(s=>!s.bidders.length))throw new Error('每个情景至少需要一个其他报价');
   } catch (error) {
     gi('optimize-result-box').innerHTML = `<p class="note" style="color:#dc2626;">${escapeHtml(error.message)}</p>`;
     gi('sensitivity-tbody').innerHTML = '';
@@ -781,7 +781,7 @@ function renderOptimize() {
 
   let optimization;
   try {
-    optimization = Scoring.optimizePriceAcrossScenarios(
+    optimization = await WorkspaceUI.search(
       targetBidder.id,
       scenarios,
       config,
@@ -794,9 +794,10 @@ function renderOptimize() {
   }
 
   const best = optimization.best;
+  WorkspaceUI.fresh('optimize-result-box','sensitivity-card');
   const countsText = optimization.participantCounts.map(count => `${count}个`).join('、');
   const specialRuleSearchNote = config.priceStrategy === 'outlierFilteredBenchmark'
-    ? '；情景未提供技术分，技术最高且最低价的特殊满分条件不纳入本次价格搜索'
+    ? (optimization.specialMode === 'technical' ? '；采用完整技术分及特殊满分条件' : '；仅价格公式模式，不采用技术分特殊满分条件')
     : '';
   const detailRows = best.details.map(detail => `<tr>
     <td>${escapeHtml(detail.name)}</td>
@@ -809,7 +810,7 @@ function renderOptimize() {
 
   const optHtml = `
     <div class="optimize-result">
-      <h3>${escapeHtml(targetBidder.name)} · 多情景最优报价推荐</h3>
+      <h3>${escapeHtml(targetBidder.name)} · 已搜索候选中的优选报价</h3>
       <div class="optimize-grid">
         <div class="optimize-item">
           <div class="oi-label">推荐报价</div>
@@ -828,7 +829,7 @@ function renderOptimize() {
           <div class="oi-value" style="font-size:16px;">${fmtPriceScore(best.avgScore, config.priceStrategy)} / 第${best.worstRank}名</div>
         </div>
       </div>
-      <p style="font-size:12px;opacity:.85;margin-top:10px;">价格规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy] || config.priceStrategy)}；共测算${optimization.scenarioCount}个等权情景，样本数量覆盖：${countsText}。只改变目标报价，其他样本保持输入值不变${specialRuleSearchNote}。</p>
+      <p style="font-size:12px;opacity:.85;margin-top:10px;">价格规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy] || config.priceStrategy)}；共测算${optimization.scenarioCount}个情景，按所设权重计算；样本数量覆盖：${countsText}。只改变目标报价，其他样本保持输入值不变${specialRuleSearchNote}。</p>
     </div>`;
   gi('optimize-result-box').innerHTML = `${optHtml}
     <div class="card" style="margin-top:16px;">
@@ -889,11 +890,13 @@ function saveScenario() {
     ...State.bidders.filter(b => !b.isMe).map(b => ({ ...b })),
   ];
   if (!validateConfig(config, bidders)) return;
-  const result = Scoring.evaluate(bidders, config);
+  let result;
+  try{result=Scoring.evaluate(bidders,config);}catch(error){alert(error.message);return;}
   const me = result.find(b => b.isMe);
 
   const name = gi('scenario-name').value || `方案${State.scenarios.length + 1}`;
   State.scenarios.push({
+    snapshot: WorkspaceUI.createSnapshot(config, bidders),
     name,
     price: myPrice,
     strategy: Scoring.strategyNames[config.priceStrategy],
@@ -906,6 +909,7 @@ function saveScenario() {
   });
   gi('scenario-name').value = '';
   renderScenarios();
+  WorkspaceUI.renderSnapshots();
   saveState();
 }
 
@@ -919,7 +923,7 @@ function renderScenarios() {
   const rows = State.scenarios.map((s, i) => `
     <tr class="${s.rank === 1 ? 'rank-1' : ''}">
       <td>${escapeHtml(s.name)}</td>
-      <td><small style="color:#888;">${s.strategy}</small></td>
+      <td><small style="color:#888;">${escapeHtml(s.strategy)}</small></td>
       <td>¥ ${fmt(s.price)}</td>
       <td>${s.businessScore}</td>
       <td>${s.techScore}</td>
@@ -929,11 +933,11 @@ function renderScenarios() {
         <strong>${s.total.toFixed(4)}</strong>
       </td>
       <td><span class="badge ${s.rank===1?'badge-green':s.rank<=2?'badge-blue':'badge-red'}">第${s.rank}名</span></td>
-      <td><small style="color:#888;">${s.timestamp || '-'}</small></td>
+      <td><small style="color:#888;">${escapeHtml(s.timestamp || '-')}</small></td>
       <td><button class="btn btn-danger" onclick="removeScenario(${i})">删除</button></td>
     </tr>`).join('');
 
-  container.innerHTML = `
+  container.innerHTML = `${WorkspaceUI.comparisonHint()}
     <table>
       <thead><tr>
         <th>方案名称</th><th>价格方法</th><th>目标报价</th>
@@ -968,24 +972,10 @@ function buildConfig() {
 }
 
 function validateConfig(config, bidders = []) {
-  const strategyErrors = Scoring.validateStrategyConfig(
-    config.priceStrategy,
-    config.priceFull,
-    config.strategyParams
-  );
+  const strategyErrors = Scoring.validateConfig(config, bidders);
   if (strategyErrors.length > 0) {
     alert(strategyErrors.join('；'));
     return false;
-  }
-  const componentErrors = Scoring.validateComponentScoreConfig(config, bidders);
-  if (componentErrors.length > 0) {
-    alert(componentErrors.join('；'));
-    return false;
-  }
-  const sum = config.businessWeight + config.priceWeight + config.techWeight;
-  if (Math.abs(sum - 100) > 0.01) {
-    // 不强制拦截，仅提示
-    return true;
   }
   return true;
 }
@@ -1000,12 +990,7 @@ function fmtBenchmark(num, strategy) {
   return strategy === 'tieredTrimmedBenchmark' ? fmt(num, 6, 6) : fmt(num);
 }
 function fmtPriceScore(score, strategy = State.config.priceStrategy) {
-  const tieredName = Scoring.strategyNames.tieredTrimmedBenchmark;
-  const outlierName = Scoring.strategyNames.outlierFilteredBenchmark;
-  return strategy === 'tieredTrimmedBenchmark' || strategy === tieredName ||
-    strategy === 'outlierFilteredBenchmark' || strategy === outlierName
-    ? Number(score).toFixed(2)
-    : score;
+  return Number(score).toFixed(2);
 }
 function formatBenchmarkCountDetails(bidder, strategy) {
   if (bidder?.validBidCount == null) return '';
@@ -1094,6 +1079,15 @@ document.addEventListener('DOMContentLoaded', () => {
   initBidderNamesPanel();  // Tab 1：名称管理
   renderBidderTable();     // Tab 3：报价录入表格初始渲染
   initScenarioPanel();
+  renderPredictTable();
+  renderOptimizeTargetOptions();
+  renderScenarios();
+  WorkspaceUI.mount({projectHost:'tab-config',searchIds:{scenarios:'opt-scenarios',minPrice:'opt-min',maxPrice:'opt-max',step:'opt-step',target:'opt-target'},resultIds:['result-area','predict-result-box','optimize-result-box','sensitivity-card'],
+    clearIds:['result-summary','result-table-head','result-table-body','result-bid-status','result-weight-info','predict-result-box','optimize-result-box','sensitivity-tbody'],
+    renderResults:renderResult,
+    syncName:()=>v('cfg-project',State.config.projectName),
+    refresh:()=>{syncConfigFromState();updateStrategyParams();renderBidderNamesPanel();renderBidderTable();renderPredictTable();renderOptimizeTargetOptions();renderScenarios();}
+  });
 
   gi('btn-calc-result').addEventListener('click', renderResult);
   gi('btn-search-optimal').addEventListener('click', renderOptimize);

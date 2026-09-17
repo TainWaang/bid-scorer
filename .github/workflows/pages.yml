@@ -24,6 +24,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+
+      - name: Prepare static files
+        run: |
+          mkdir -p _site
+          cp index.html mobile.html _site/
+          cp -r js css _site/
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
@@ -32,7 +48,7 @@ jobs:
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to Pages
         id: deployment

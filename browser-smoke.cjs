@@ -1,0 +1,117 @@
+// Run with PLAYWRIGHT_MODULE and CHROMIUM_PATH when using an isolated runtime.
+const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const http = require('node:http');
+const root = __dirname;
+const server = http.createServer((req,res)=>{
+  const route = new URL(req.url,'http://local').pathname;
+  const name = route === '/' ? 'index.html' : route.slice(1);
+  if(!/^(index\.html|mobile\.html|(?:js|css)\/[\w.-]+)$/.test(name)){res.writeHead(404);res.end();return;}
+  const file=path.join(root,name);
+  if(!fs.existsSync(file)){res.writeHead(404);res.end();return;}
+  res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');
+  res.end(fs.readFileSync(file));
+});
+const checks=[];
+(async()=>{
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH || undefined});
+  const context=await browser.newContext({viewport:{width:1365,height:1000},acceptDownloads:true});
+  const page=await context.newPage();const errors=[];
+  page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());
+  try {
+    await page.goto(base);await page.locator('#ws-status').filter({hasText:'已保存'}).waitFor();
+    await page.locator('#ws-name').fill('验收项目');
+    await page.locator('#cfg-bw').fill('8');await page.locator('#cfg-pw').fill('46');await page.locator('#cfg-tw').fill('46');
+    await page.locator('#cfg-business-full').fill('8');await page.locator('#cfg-tech-full').fill('46');await page.locator('#cfg-price-full').fill('46');
+    await page.locator('#cfg-strategy').selectOption('fixedBenchmark');await page.locator('#sp-benchmark').fill('100');
+    await page.locator('[data-tab="tab-result"]').click();
+    for(let i=0;i<3;i++){
+      const row=page.locator('#bidder-tbody tr').nth(i);
+      await row.locator('input[type=text]').fill(String([100,100,120][i]));
+      await row.locator('input[type=number]').nth(0).fill(String([8,8,6][i]));
+      await row.locator('input[type=number]').nth(1).fill(String([46,46,40][i]));
+    }
+    await page.locator('#btn-calc-result').click();
+    assert.equal(await page.locator('#result-table-body tr').count(),3);
+    assert.match(await page.locator('#result-table-body').innerText(),/并列/);
+    checks.push('desktop totals and ties');
+    await page.locator('[data-tab="tab-optimize"]').click();await page.locator('#btn-predict-calc').click();
+    assert.equal(await page.locator('#predict-result-box tbody tr').count(),3);
+    await page.getByRole('button',{name:'按假设报价排序'}).click();
+    await page.getByRole('button',{name:'按假设报价排序'}).click();
+    assert.match(await page.locator('#predict-result-box tbody tr').first().innerText(),/120/);
+    await page.locator('.predict-price-input').first().fill('101');
+    assert.match(await page.locator('#predict-result-box .ws-stale-note').innerText(),/旧结果/);
+    await page.locator('#btn-predict-calc').click();
+    assert.equal(await page.locator('#predict-result-box .ws-stale-note').count(),0);
+    checks.push('sorting and stale result state');
+    await page.locator('#opt-min').fill('90');await page.locator('#opt-max').fill('120');await page.locator('#opt-step').fill('1');
+    await page.locator('#ws-objective').selectOption('minScore');await page.locator('#btn-search-optimal').click();
+    await page.locator('#optimize-result-box').filter({hasText:'优选报价'}).waitFor();
+    assert.match(await page.locator('#ws-ranges').innerText(),/候选/);
+    checks.push('background search');
+    await page.getByText('表格管理情景（支持任意样本数量与权重）',{exact:true}).click();await page.locator('#ws-add-scenario').click();
+    await page.locator('#ws-scenario-rows [data-field=weight]').fill('3');
+    await page.locator('#ws-scenario-rows [data-field=prices]').fill('100; 120; 130');
+    assert.match(await page.locator('#ws-count-0').innerText(),/共4个/);
+    await page.locator('#btn-search-optimal').click();await page.locator('#ws-search-status').filter({hasText:'测算完成'}).waitFor();
+    checks.push('structured weighted scenario');
+    await page.locator('#opt-min').fill('1');await page.locator('#opt-max').fill('190000');await page.locator('#opt-step').fill('1');
+    await page.locator('#btn-search-optimal').click();await page.locator('#ws-cancel').click();
+    await page.locator('#optimize-result-box').filter({hasText:'取消'}).waitFor();
+    checks.push('search cancellation');
+    await page.locator('#opt-min').fill('90');await page.locator('#opt-max').fill('120');await page.locator('#opt-step').fill('1');
+    await page.locator('[data-tab="tab-result"]').click();await page.getByRole('button',{name:'保存为方案 →',exact:true}).click();
+    await page.locator('#scenario-name').fill('原始方案');await page.locator('#btn-save-scenario').click();
+    await page.locator('[data-tab="tab-config"]').click();
+    await page.getByText('已保存方案：恢复与复算',{exact:true}).click();
+    await page.getByRole('button',{name:'恢复为新项目',exact:true}).click();
+    assert.equal(await page.locator('#ws-name').inputValue(),'原始方案 复算');
+    await page.locator('[data-tab="tab-result"]').click();await page.locator('#btn-calc-result').click();
+    assert.equal(await page.locator('#result-table-body tr').count(),3);
+    checks.push('snapshot restored and recalculated');
+    await page.locator('[data-tab="tab-config"]').click();
+    const reportWait=page.waitForEvent('download');await page.locator('#ws-report').click();const report=await reportWait;
+    const reportPath=await report.path();assert.match(fs.readFileSync(reportPath,'utf8'),/完整复核数据/);
+    const exportWait=page.waitForEvent('download');await page.locator('#ws-export').click();const exported=await exportWait;
+    await page.locator('#ws-import').setInputFiles(await exported.path());
+    await page.locator('#ws-status').filter({hasText:'已保存'}).waitFor();
+    checks.push('project roundtrip and report');
+    await page.getByText('批量录入与参与状态',{exact:true}).click();
+    await page.locator('#ws-paste').fill('批量样本\t130\t6\t35');await page.locator('#ws-preview').click();await page.locator('#ws-append').click();
+    await page.locator('[data-tab="tab-result"]').click();assert.equal(await page.locator('#bidder-tbody tr').count(),4);
+    checks.push('batch preview and append');
+    await page.goto(base+'/mobile.html');await page.locator('#ws-status').filter({hasText:'已保存'}).waitFor();
+    assert.equal(await page.locator('#ws-name').inputValue(),'原始方案 复算');
+    assert.equal(await page.locator('#bidder-list .bidder-card').count(),4);
+    await page.setViewportSize({width:390,height:844});
+    await page.getByRole('button',{name:'立即计算',exact:true}).click();
+    assert.equal(await page.locator('#result-content .rank-card').count(),4);
+    await page.reload();await page.getByRole('button',{name:'立即计算',exact:true}).click();
+    assert.equal(await page.locator('#result-content .rank-card').count(),4);
+    assert.match(await page.locator('#result-content').innerText(),/价格排名/);
+    await page.waitForFunction(()=>Math.abs(document.getElementById('page-2').getBoundingClientRect().left)<2);
+    assert.ok(await page.locator('#result-content .my-summary').isVisible());
+    await page.locator('#ws-result-sort').selectOption('priceDesc');
+    assert.match(await page.locator('#result-content .rank-card').first().innerText(),/130/);
+    checks.push('mobile persistence and same-project scores');
+    const dir=process.env.SMOKE_ARTIFACT_DIR;
+    if(dir){fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,'mobile.png')});}
+    await page.goto(base);await page.setViewportSize({width:1365,height:1000});
+    const peer=await context.newPage();await peer.goto(base+'/mobile.html');
+    await peer.locator('#ws-status').filter({hasText:'已保存'}).waitFor();
+    await page.locator('#ws-name').fill('不得覆盖其他页');
+    assert.match(await page.locator('#ws-status').innerText(),/未保存/);
+    await peer.reload();assert.equal(await peer.locator('#ws-name').inputValue(),'原始方案 复算');
+    await peer.close();await page.reload();
+    checks.push('cross-tab conflict does not overwrite');
+    await page.locator('[data-tab="tab-result"]').click();
+    if(dir)await page.screenshot({path:path.join(dir,'desktop.png')});
+    assert.deepEqual(errors,[]);
+    console.log(JSON.stringify({checks,pageErrors:errors.length},null,2));
+  } finally {await context.close();await browser.close();server.close();}
+})().catch(error=>{console.error(error);server.close();process.exitCode=1;});

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>报价评分情景模拟器</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/workspace.css">
 </head>
 <body>
 
@@ -34,15 +35,7 @@
   <!-- ===================== Tab 1: 配置 ===================== -->
   <div class="tab-panel active" id="tab-config">
 
-    <div class="card">
-      <div class="card-title">项目基本信息</div>
-      <div class="form-row">
-        <div class="form-group" style="min-width:300px;">
-          <label>项目名称</label>
-          <input type="text" id="cfg-project" placeholder="填写项目或测算名称（可选）">
-        </div>
-      </div>
-    </div>
+    <input type="hidden" id="cfg-project">
 
     <div class="card">
       <div class="card-title">综合分值构成与录入满分
@@ -235,12 +228,12 @@
           <button class="btn btn-success" id="btn-search-optimal">搜索最优报价</button>
         </div>
       </div>
-      <p class="note">适用于多个主体分别进行独立测算：每次只选择一个目标，其他样本保持输入值不变，不进行联动或批量推荐。可添加任意数量、任意样本数的情景；每行冒号后填写用户独立设定的其他报价样本。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，并切换 ≤5个、6–10个、≥11个的基准价规则。报价不使用千位分隔符。各情景等权，先最大化价格得分并列第一的情景比例，再比较最低价格分、平均价格分，同分时选择较高报价。情景留空时使用当前报价样本列表中的已填数据。</p>
+      <p class="note">每次只改变所选目标报价。文本情景每行一个，金额用分号或空格分隔，不含千位分隔符；也可启用下方情景表并设置权重。人数包含目标，按当前配置自动匹配分档规则。搜索目标、报价底线和特殊条件均可配置。第一情景比例不是实际发生概率。</p>
     </div>
 
     <div id="optimize-result-box"></div>
 
-    <div class="card" style="margin-top:16px;">
+    <div class="card" id="sensitivity-card" style="margin-top:16px;">
       <div class="card-title">价格敏感性分析</div>
       <p class="note" style="margin-bottom:10px;">展示不同目标报价在全部自定义情景中的价格得分并列第一比例、最低分和平均分</p>
       <div class="table-wrap sensitivity-chart">
@@ -315,6 +308,8 @@
 </div>
 
 <script src="js/scoring.js"></script>
+<script src="js/workspace.js"></script>
+<script src="js/workspace-ui.js"></script>
 <script src="js/main.js"></script>
 <script>
 // 补充全局函数
@@ -324,7 +319,7 @@ function switchTab(tabId) {
   document.querySelector('[data-tab="' + tabId + '"]').classList.add('active');
   document.getElementById(tabId).classList.add('active');
   if (tabId === 'tab-result') renderResult();
-  if (tabId === 'tab-optimize') renderOptimize();
+  if (tabId === 'tab-optimize') { renderPredictTable(); renderOptimizeTargetOptions(); }
 }
 
 function saveScenarioFromResult() {

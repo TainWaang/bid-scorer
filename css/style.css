@@ -369,6 +369,68 @@ tr.rank-1 td:first-child::after {
   font-weight: 600;
 }
 
+.predict-result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.predict-result-head > div:first-child p {
+  margin-bottom: 0 !important;
+}
+
+.predict-sort-status {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.table-sort-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+
+.table-sort-btn span {
+  color: #94a3b8;
+  display: inline-block;
+  min-width: 12px;
+}
+
+.table-sort-btn.active,
+.table-sort-btn.active span,
+.table-sort-btn:hover,
+.table-sort-btn:focus-visible {
+  color: #fff7ae;
+}
+
+.table-sort-btn:focus-visible {
+  outline: 2px solid #fff7ae;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (max-width: 720px) {
+  .predict-result-head {
+    display: block;
+  }
+
+  .predict-sort-status {
+    margin-top: 4px;
+    text-align: left;
+    white-space: normal;
+  }
+}
+
 .summary-card {
   background: linear-gradient(135deg, #1a3a5c, #2e6da4);
   color: #fff;

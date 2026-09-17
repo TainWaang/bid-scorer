@@ -1,0 +1,10 @@
+{
+  "name": "bid-scorer",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test scoring.test.js workspace.test.js",
+    "test:browser": "node browser-smoke.cjs"
+  },
+  "devDependencies": { "playwright": "1.58.2" }
+}

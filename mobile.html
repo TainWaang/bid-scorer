@@ -6,6 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>报价评分情景模拟器</title>
+  <link rel="stylesheet" href="css/workspace.css">
   <style>
     :root {
       color-scheme: light;
@@ -126,6 +127,7 @@
       transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
     }
     .page {
+      flex: 0 0 20%; min-width: 0;
       width: 20%; height: 100%;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
@@ -607,7 +609,7 @@
         <button class="btn btn-primary" onclick="runOptimize()">
           <span>搜索最优报价</span>
         </button>
-        <p class="note">适用于多个主体分别独立测算：每次只选择一个目标，其他样本保持输入值不变，不进行联动或批量推荐。可添加任意数量、任意样本数的情景。选择“分档去高去低×系数法”时，系统连同目标报价统计有效报价数，自动切换 ≤5个、6–10个、≥11个规则；报价不要使用千位分隔符。各情景等权，先最大化价格得分并列第一比例，再比较最低分、平均分，同分时选择较高报价。留空则使用当前报价样本列表。</p>
+        <p class="note">每次只改变所选目标报价。文本情景每行一个，金额用分号或空格分隔，不含千位分隔符；也可启用下方情景表并设置权重。人数包含目标，按当前配置自动匹配分档规则。搜索目标、报价底线和特殊条件均在下方配置。第一情景比例不是实际发生概率。</p>
       </div>
 
       <div id="opt-result-box"></div>
@@ -683,6 +685,8 @@
 </div>
 
 <script src="js/scoring.js"></script>
+<script src="js/workspace.js"></script>
+<script src="js/workspace-ui.js"></script>
 <script>
 // ── State ──
 const S = {
@@ -950,6 +954,7 @@ function updateMobileBidderPrice(idx, input) {
   const rawValue = input.value;
   const price = Scoring.normalizePriceInput(rawValue);
   S.bidders[idx].price = price;
+  S.bidders[idx].priceInputError = rawValue.trim() !== '' && price <= 0;
   input.classList.toggle('price-input-invalid', rawValue.trim() !== '' && price <= 0);
 }
 
@@ -971,7 +976,7 @@ function updateMobileBidderScore(idx, field, input) {
 function renderResult() {
   const config = buildConfig();
   const content = gi('result-content');
-  const configErrors = Scoring.validateStrategyConfig(config.priceStrategy, config.priceFull, config.strategyParams);
+  const configErrors = Scoring.validateConfig(config, S.bidders);
   const bidders = S.bidders.map(b=>({...b}));
   const componentErrors = Scoring.validateComponentScoreConfig(config, bidders);
   const allErrors = [...configErrors, ...componentErrors];
@@ -980,7 +985,10 @@ function renderResult() {
     return;
   }
   const bidValidity = Scoring.summarizeBidValidity(bidders);
-  const result  = Scoring.evaluate(bidders, config);
+  let result;
+  try { result=Scoring.evaluate(bidders,config); }
+  catch(error){content.textContent=error.message;return;}
+  WorkspaceUI.fresh('result-content');
   const me = result.find(b=>b.isMe);
 
   let html = '';
@@ -995,19 +1003,15 @@ function renderResult() {
     const excludedNamesText = excludedNames ? `（${excludedNames}）` : '';
     countDetailText = `初始均值¥${fmtDecimal(result[0].preliminaryAverage)}，达到¥${fmtDecimal(result[0].exclusionThreshold)}的${result[0].excludedHighBidCount}个高价${excludedNamesText}不参与基准价计算，最终纳入${result[0].includedBidCount}个报价。`;
   }
-  const filtersInvalidBidders = config.priceStrategy === 'tieredTrimmedBenchmark' ||
-    config.priceStrategy === 'outlierFilteredBenchmark';
-  const invalidImpactText = filtersInvalidBidders
-    ? '未进入本次评分及基准价计算'
-    : '报价未进入价格基准计算';
+  const invalidImpactText = '未进入本次评分及基准价计算';
   html += `<div class="bid-validity-status${bidValidity.invalidCount?' warn':''}">
     <strong>已建立${bidValidity.totalCount}个样本，有效${bidValidity.validCount}个。</strong>
-    ${bidValidity.invalidCount?`${invalidImpactText}：${invalidNames}（报价为空、为0或格式无效）。`:''}${countDetailText}
+    ${bidValidity.invalidCount?`${invalidImpactText}：${invalidNames}（未报价或已停用）。`:''}${countDetailText}
   </div>`;
 
   // My summary
   if (me) {
-    const rankLabel = me.rank===1?'第一名 🏆':me.rank===2?'第二名':'第'+me.rank+'名';
+    const rankLabel = (me.tied?'并列':'')+(me.rank===1?'第一名 🏆':me.rank===2?'第二名':'第'+me.rank+'名');
     html += `<div class="my-summary">
       <div class="my-summary-title">目标方案综合评分结果</div>
       <div class="my-summary-rank">${rankLabel}</div>
@@ -1026,14 +1030,17 @@ function renderResult() {
     }
   }
 
+  html += WorkspaceUI.trace(result) + WorkspaceUI.resultTools(result);
   // All bidders
-  result.forEach(b => {
+  WorkspaceUI.sortedResults(result).forEach(b => {
     const cls = b.rank===1?'first':b.rank===2?'second':'other';
-    html += `<div class="rank-card ${cls}">
+    html += `<div ${b.isMe?'data-result-target':''} class="rank-card ${cls}">
       <div class="rank-num">${b.rank}</div>
       <div class="rank-name">${escapeHtml(b.name)}${b.isMe?'（目标）':''}</div>
       <div class="rank-total">${b.total.toFixed(4)}</div>
       <div class="rank-meta">
+        <div class="rank-meta-item">综合排名 <span>${b.tied?'并列':''}${b.rank}</span></div>
+        <div class="rank-meta-item">价格排名 <span>${b.priceTied?'并列':''}${b.priceRank}</span></div>
         <div class="rank-meta-item">报价 <span>¥${fmt(b.price)}</span></div>
         <div class="rank-meta-item">商务 <span>${b.businessScore}</span></div>
         <div class="rank-meta-item">价格 <span>${fmtPriceScore(b.priceScore, config.priceStrategy)}${b.specialFullScore?'（技术最高且最低价满分）':''}</span></div>
@@ -1096,15 +1103,16 @@ function initOptimizeDefaults() {
   }
 }
 
-function runOptimize() {
+async function runOptimize() {
   renderMobileOptimizeTargets();
   const config = buildConfig();
   const targetBidder = S.bidders.find(bidder=>bidder.id===gi('m-opt-target').value);
   if (!targetBidder) return;
-  const others = S.bidders.filter(bidder=>bidder.id!==targetBidder.id && bidder.price>0);
+  const others = S.bidders.filter(bidder=>bidder.id!==targetBidder.id && bidder.price>0 && bidder.enabled!==false);
   let scenarios;
   try {
-    scenarios = Scoring.parsePriceScenarios(gi('m-opt-scenarios').value,others);
+    scenarios = WorkspaceUI.scenarios(gi('m-opt-scenarios').value,others);
+    if(!scenarios.length || scenarios.some(s=>!s.bidders.length))throw new Error('每个情景至少需要一个其他报价');
   } catch (error) {
     gi('opt-result-box').innerHTML = `<div class="card"><p class="note error-note">${escapeHtml(error.message)}</p></div>`;
     gi('sens-card').style.display = 'none';
@@ -1125,16 +1133,17 @@ function runOptimize() {
 
   let optimization;
   try {
-    optimization = Scoring.optimizePriceAcrossScenarios(targetBidder.id,scenarios,config,{minPrice:minP,maxPrice:maxP,step});
+    optimization = await WorkspaceUI.search(targetBidder.id,scenarios,config,{minPrice:minP,maxPrice:maxP,step});
   } catch (error) {
     gi('opt-result-box').innerHTML = `<div class="card"><p class="note error-note">${escapeHtml(error.message)}</p></div>`;
     gi('sens-card').style.display = 'none';
     return;
   }
   const best = optimization.best;
+  WorkspaceUI.fresh('opt-result-box','sens-list');
   const countsText = optimization.participantCounts.map(count=>`${count}个`).join('、');
   const specialRuleSearchNote = config.priceStrategy === 'outlierFilteredBenchmark'
-    ? '；情景未提供技术分，特殊满分条件不纳入本次价格搜索'
+    ? (optimization.specialMode==='technical'?'；采用完整技术分及特殊满分条件':'；仅价格公式模式，不采用技术分特殊条件')
     : '';
   const detailsHtml = best.details.map(detail=>`<div class="scenario-card ${detail.isTop?'s-first':''}">
     <div class="sc-head"><div class="sc-name">${escapeHtml(detail.name)} · ${detail.participantCount}个</div><div class="sc-rank ${detail.isTop?'first':''}">第${detail.priceRank}名</div></div>
@@ -1147,14 +1156,14 @@ function runOptimize() {
 
   const box = gi('opt-result-box');
   box.innerHTML = `<div class="opt-result">
-    <div class="opt-result-title">${escapeHtml(targetBidder.name)} · 多情景最优报价推荐</div>
+    <div class="opt-result-title">${escapeHtml(targetBidder.name)} · 已搜索候选中的优选报价</div>
     <div class="opt-price">¥ ${fmt(best.price)}</div>
     <div class="opt-meta">
       <div class="opt-meta-item"><div class="oml">价格第一情景</div><div class="omv">${best.topRate}%</div></div>
       <div class="opt-meta-item"><div class="oml">最低 / 平均价格分</div><div class="omv">${fmtPriceScore(best.minScore,config.priceStrategy)} / ${fmtPriceScore(best.avgScore,config.priceStrategy)}</div></div>
       <div class="opt-meta-item"><div class="oml">最差价格排名</div><div class="omv">第${best.worstRank}名</div></div>
     </div>
-    <div class="result-context">规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy]||config.priceStrategy)}；${optimization.scenarioCount}个等权情景；样本数量覆盖：${countsText}；只改变目标报价${specialRuleSearchNote}</div>
+    <div class="result-context">规则：${escapeHtml(Scoring.strategyNames[config.priceStrategy]||config.priceStrategy)}；${optimization.scenarioCount}个情景，按所设权重计算；样本数量覆盖：${countsText}；只改变目标报价${specialRuleSearchNote}</div>
   </div>
   <div class="card"><div class="card-head">推荐价逐情景结果</div>${detailsHtml}</div>`;
 
@@ -1179,12 +1188,15 @@ function saveScenario() {
   const myBidder = S.bidders.find(b=>b.isMe);
   if (!myBidder||!myBidder.price) { alert('请先填写目标报价'); return; }
   const bidders = S.bidders.map(b=>({...b}));
-  const componentErrors = Scoring.validateComponentScoreConfig(config, bidders);
+  const componentErrors = Scoring.validateConfig(config, bidders);
   if (componentErrors.length > 0) { alert(componentErrors.join('；')); return; }
-  const result = Scoring.evaluate(bidders, config);
+  let result;
+  try {result=Scoring.evaluate(bidders,config);}catch(error){alert(error.message);return;}
   const me = result.find(b=>b.isMe);
   const name = gi('m-scenario-name').value || `方案${S.scenarios.length+1}`;
   S.scenarios.push({
+    snapshot: WorkspaceUI.createSnapshot(config,bidders),
+    timestamp: new Date().toLocaleString(),
     name,
     price: myBidder.price,
     strategy: Scoring.strategyNames[config.priceStrategy],
@@ -1196,6 +1208,8 @@ function saveScenario() {
   });
   gi('m-scenario-name').value = '';
   renderScenarios();
+  WorkspaceUI.save();
+  WorkspaceUI.renderSnapshots();
 }
 
 function renderScenarios() {
@@ -1208,12 +1222,12 @@ function renderScenarios() {
   badge.style.display = 'block';
   badge.textContent = S.scenarios.length;
   const maxT = Math.max(...S.scenarios.map(s=>s.total));
-  list.innerHTML = S.scenarios.map((s,i) => `
+  list.innerHTML = WorkspaceUI.comparisonHint() + S.scenarios.map((s,i) => `
     <div class="scenario-card ${s.rank===1?'s-first':''}">
       <div class="sc-head">
         <div>
           <div class="sc-name">${escapeHtml(s.name)}</div>
-          <div class="scenario-sub">${s.strategy}</div>
+          <div class="scenario-sub">${escapeHtml(s.strategy)}</div>
         </div>
         <div class="align-right">
           <div class="sc-rank ${s.rank===1?'first':(s.rank===2?'second':'')}">
@@ -1235,6 +1249,8 @@ function renderScenarios() {
 function removeScenario(idx) {
   S.scenarios.splice(idx,1);
   renderScenarios();
+  WorkspaceUI.save();
+  WorkspaceUI.renderSnapshots();
 }
 
 // ── Presets ──
@@ -1282,7 +1298,7 @@ function buildConfig() {
   return { ...S.config, strategyParams: { ...S.config.strategyParams }, myBidderId: 'my' };
 }
 function gi(id) { return document.getElementById(id); }
-function fmt(n) { if(!n&&n!==0) return '-'; return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:0}); }
+function fmt(n) { if(!n&&n!==0) return '-'; return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:2}); }
 function fmtDecimal(n, maximumFractionDigits = 2) {
   if (!n && n !== 0) return '-';
   return Number(n).toLocaleString('zh-CN', { maximumFractionDigits });
@@ -1293,12 +1309,7 @@ function fmtBenchmark(n, strategy) {
   return Number(n).toLocaleString('zh-CN',{minimumFractionDigits:6,maximumFractionDigits:6});
 }
 function fmtPriceScore(score, strategy = S.config.priceStrategy) {
-  const tieredName = Scoring.strategyNames.tieredTrimmedBenchmark;
-  const outlierName = Scoring.strategyNames.outlierFilteredBenchmark;
-  return strategy === 'tieredTrimmedBenchmark' || strategy === tieredName ||
-    strategy === 'outlierFilteredBenchmark' || strategy === outlierName
-    ? Number(score).toFixed(2)
-    : score;
+  return Number(score).toFixed(2);
 }
 function formatMobileBenchmarkCountDetails(bidder, strategy) {
   if (bidder?.validBidCount == null) return '';
@@ -1323,11 +1334,21 @@ function fmtShort(n) {
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
+  WorkspaceUI.load(S);
+  syncMobileConfig();
   initWeightBindings();
   initStrategyBinding();
   renderBidders();
   renderScenarios();
+  WorkspaceUI.mount({projectHost:'page-0',searchIds:{scenarios:'m-opt-scenarios',minPrice:'m-opt-min',maxPrice:'m-opt-max',step:'m-opt-step',target:'m-opt-target'},resultIds:['result-content','opt-result-box','sens-list'],
+    renderResults:renderResult,
+    refresh:()=>{syncMobileConfig();updateWeights();renderStrategyParams();renderBidders();renderScenarios();}
+  });
 });
+
+function syncMobileConfig() {
+  for(const [id,key] of Object.entries({'m-bw':'businessWeight','m-pw':'priceWeight','m-tw':'techWeight','m-bf':'businessFull','m-pf':'priceFull','m-tf':'techFull','m-strategy':'priceStrategy'}))gi(id).value=S.config[key];
+}
 </script>
 </body>
 </html>

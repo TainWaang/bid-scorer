@@ -89,6 +89,25 @@ assert.strictEqual(validitySummary.invalidCount, 3);
 assert.deepStrictEqual(validitySummary.validBidders.map(bidder => bidder.price), [4500000, 3200000]);
 assert.deepStrictEqual(validitySummary.invalidBidders.map(bidder => bidder.name), ['空值', '格式错误', '零报价']);
 
+const sortablePriceResults = [
+  { id: 'source-a', priceRank: 2, price: 100 },
+  { id: 'source-b', priceRank: 1, price: 200 },
+  { id: 'source-empty', priceRank: 3, price: 0 },
+];
+assert.deepStrictEqual(
+  Scoring.sortPriceResults(sortablePriceResults, 'priceRank', 'asc').map(row => row.id),
+  ['source-b', 'source-a', 'source-empty']
+);
+assert.deepStrictEqual(
+  Scoring.sortPriceResults(sortablePriceResults, 'price', 'asc').map(row => row.id),
+  ['source-a', 'source-b', 'source-empty']
+);
+assert.deepStrictEqual(
+  Scoring.sortPriceResults(sortablePriceResults, 'price', 'desc').map(row => row.id),
+  ['source-b', 'source-a', 'source-empty']
+);
+assert.deepStrictEqual(sortablePriceResults.map(row => row.id), ['source-a', 'source-b', 'source-empty']);
+
 const outlierParams = {
   outlierCutoffMultiple: 1.5,
   outlierBenchmarkFactor: 0.95,
