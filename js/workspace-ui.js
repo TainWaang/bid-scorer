@@ -158,7 +158,12 @@ const WorkspaceUI = (() => {
     $('ws-use-scenarios').checked=!!state.search?.useTable;
     panel.addEventListener('input',()=>{invalidate();saveSearchOptions();});
     panel.addEventListener('change',()=>{invalidate();saveSearchOptions();});
-    $('ws-add-scenario').onclick=()=>{state.search ||= {};state.search.rows ||= [];state.search.rows.push({name:'情景'+(state.search.rows.length+1),weight:1,bidders:state.bidders.filter(b=>b.id!==$(adapter.searchIds.target).value && b.enabled!==false && b.price>0).map(b=>({...b}))});state.search.useTable=true;renderScenarios();save(true);};
+    $('ws-add-scenario').onclick=()=>{
+      try {
+        validateCurrentScenario();
+        state.search ||= {};state.search.rows ||= [];state.search.rows.push({name:'情景'+(state.search.rows.length+1),weight:1,bidders:state.bidders.filter(b=>b.id!==$(adapter.searchIds.target).value && b.enabled!==false && b.price>0).map(b=>({...b}))});state.search.useTable=true;renderScenarios();save(true);
+      } catch(error) { $('ws-search-status').textContent=error.message; }
+    };
     $('ws-cancel').onclick=cancelSearch;
   }
   function saveSearchOptions() {
@@ -186,8 +191,15 @@ const WorkspaceUI = (() => {
     $('ws-scenario-rows').querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const copy=Workspace.clone(state.search.rows[+b.dataset.copy]);copy.name+=' 副本';state.search.rows.push(copy);renderScenarios();invalidate();save();});
     $('ws-scenario-rows').querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{state.search.rows.splice(+b.dataset.remove,1);renderScenarios();invalidate();save();});
   }
+  function validateCurrentScenario() {
+    if (state.config.priceStrategy !== 'piecewiseAverage') return;
+    const others = state.bidders.filter(b=>b.id !== $(adapter.searchIds.target).value);
+    const errors = Scoring.validateConfig(state.config, others, true);
+    if (errors.length) throw new Error(errors.join('；'));
+  }
   function scenarios(text, fallback) {
     if(!state.search?.useTable) {
+      if (!text.trim()) validateCurrentScenario();
       if(!text.trim() && $('ws-special').value==='technical') return [{name:'当前样本',weight:1,bidders:fallback.map(b=>({...b}))}];
       return Scoring.parsePriceScenarios(text,fallback);
     }
@@ -233,7 +245,7 @@ const WorkspaceUI = (() => {
   }
   function trace(rows) {
     const b=rows.find(b=>b.benchmark>0);if(!b)return '';
-    return `<details class="ws-trace"><summary>基准价 ${fmt(b.benchmark)} · 查看计算过程</summary><p>${esc(Scoring.describeRule(state.config))}</p>${b.preliminaryAverage!=null?`<p>初始均价：${fmt(b.preliminaryAverage)}；高价阈值：${fmt(b.exclusionThreshold)}；不纳入均价：${(b.excludedHighBidderNames||[]).map(esc).join('、')||'无'}</p>`:''}${b.validBidCount!=null?`<p>有效${b.validBidCount}个；${b.trimCount!=null?'两端各去'+b.trimCount+'个；':''}纳入均价${b.includedBidCount}个。</p>`:''}<p>偏差率 =（报价 − 基准价）÷ 基准价 × 100%；按所选规则的高低侧斜率及舍入顺序计分，再应用得分上下限与特殊条件。</p></details>`;
+    return `<details class="ws-trace"><summary>基准价 ${fmt(b.benchmark)} · 查看计算过程</summary><p>${esc(Scoring.describeRule(state.config))}</p>${b.preliminaryAverage!=null?`<p>初始均价：${fmt(b.preliminaryAverage)}；高价阈值：${fmt(b.exclusionThreshold)}；不纳入均价：${(b.excludedHighBidderNames||[]).map(esc).join('、')||'无'}</p>`:''}${b.validBidCount!=null?`<p>有效${b.validBidCount}个；${b.trimCount!=null?'两端各去'+b.trimCount+'个；':''}纳入均价${b.includedBidCount}个。</p>`:''}<p>偏差率 =（报价 − 基准价）÷ 基准价 × 100%；${state.config.priceStrategy==='piecewiseAverage'?'按相邻K节点线性插值，首末节点外使用固定分，再按选定舍入口径计分。':'按所选规则的高低侧斜率及舍入顺序计分，再应用得分上下限与特殊条件。'}</p></details>`;
   }
   function resultTools(rows) {
     const view=state.resultView||{sort:'rank',query:''};

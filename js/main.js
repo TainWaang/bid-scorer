@@ -23,6 +23,10 @@ const State = {
       avgHighDeduct: 1,
       avgMaxScore: 100,
       avgMinScore: 0,
+      piecewiseNodes: Scoring.DEFAULT_PIECEWISE_NODES,
+      piecewiseLeftScore: 80,
+      piecewiseRightScore: 60,
+      piecewiseScoreDecimals: -1,
       outlierCutoffMultiple: 1.5,
       outlierBenchmarkFactor: 0.95,
       outlierHighDeduct: 0.8,
@@ -226,6 +230,16 @@ function updateStrategyParams() {
     </div>`;
 
   const templates = {
+    piecewiseAverage: `<div class="form-row">
+      <div class="form-group" style="flex:1;min-width:240px;">
+        <label for="sp-piecewiseNodes">偏差率节点（百分数）与得分：每行一组</label>
+        <textarea id="sp-piecewiseNodes" rows="14" spellcheck="false">${escapeHtml(p.piecewiseNodes ?? Scoring.DEFAULT_PIECEWISE_NODES)}</textarea>
+      </div>
+      <div class="form-group"><label for="sp-piecewiseLeftScore">左端固定分（含首节点）</label><input type="number" id="sp-piecewiseLeftScore" value="${p.piecewiseLeftScore ?? 80}" min="0" step="any"></div>
+      <div class="form-group"><label for="sp-piecewiseRightScore">右端固定分（含末节点）</label><input type="number" id="sp-piecewiseRightScore" value="${p.piecewiseRightScore ?? 60}" min="0" step="any"></div>
+      <div class="form-group"><label for="sp-piecewiseScoreDecimals">价格分舍入口径</label><select id="sp-piecewiseScoreDecimals">${[-1,0,1,2,3,4,5,6].map(n=>`<option value="${n}" ${Number(p.piecewiseScoreDecimals??-1)===n?'selected':''}>${n===-1?'保留计算精度（显示两位）':`先四舍五入至${n}位`}</option>`).join('')}</select></div>
+    </div>
+    <p class="note">填写 -5 100 表示 K=-5% 得100分；-5和-3两个节点同为100分即形成满分平台。基准价是所有参与样本经复核价格的算术均值，不去高低、不乘系数。每条报价必须已复核，不合格样本请停用。当前参考节点使用100分制；分值构成与三项录入满分仍由你独立设置。节点须严格递增，首末得分分别等于左右端固定分；A和K不提前舍入。</p>`,
     lowestPrice: `<p class="note">最低报价得满分，其他报价按"满分×(最低价÷本人报价)"计算，无需额外参数。</p>`,
     averagePrice: `<div class="form-row">
       <div class="form-group"><label>平均价得分</label>
@@ -346,12 +360,12 @@ function updateStrategyParams() {
   container.innerHTML = `<div class="strategy-params">${templates[strategy] || ''}</div>`;
 
   // 绑定参数输入事件
-  const paramIds = ['deductHigh','deductLow','avgBaseScore','avgLowAdd','avgHighDeduct','avgMaxScore','avgMinScore','outlierCutoffMultiple','outlierBenchmarkFactor','outlierHighDeduct','outlierLowDeduct','outlierMinScore','outlierDeviationDecimals','weightLow','weightAvg','benchmark','lowerPct','upperPct','deductOut','trimCount','tierHighThreshold','tierMidThreshold','tierHighTrim','tierMidTrim','benchmarkFactor','benchmarkDecimals','tierBaseScore','tierHighDeduct','tierLowAdd','tierMinScore','tierMaxScore'];
+  const paramIds = ['piecewiseNodes','piecewiseLeftScore','piecewiseRightScore','piecewiseScoreDecimals','deductHigh','deductLow','avgBaseScore','avgLowAdd','avgHighDeduct','avgMaxScore','avgMinScore','outlierCutoffMultiple','outlierBenchmarkFactor','outlierHighDeduct','outlierLowDeduct','outlierMinScore','outlierDeviationDecimals','weightLow','weightAvg','benchmark','lowerPct','upperPct','deductOut','trimCount','tierHighThreshold','tierMidThreshold','tierHighTrim','tierMidTrim','benchmarkFactor','benchmarkDecimals','tierBaseScore','tierHighDeduct','tierLowAdd','tierMinScore','tierMaxScore'];
   paramIds.forEach(pid => {
     const el = gi('sp-' + pid);
     if (el) {
       el.addEventListener('input', () => {
-        State.config.strategyParams[pid] = +el.value;
+        State.config.strategyParams[pid] = pid === 'piecewiseNodes' ? el.value : +el.value;
         if (pid === 'tierMaxScore' && State.config.priceStrategy === 'tieredTrimmedBenchmark') {
           State.config.priceFull = +el.value || 40;
           v('cfg-price-full', State.config.priceFull);
@@ -546,7 +560,7 @@ function renderResult() {
     ${me && me.benchmark ? `<div class="summary-card">
       <div class="label">评分基准价</div>
       <div class="value">¥${fmtBenchmark(me.benchmark, config.priceStrategy)}</div>
-      <div class="sub">偏差 ${me.deviation ?? '-'}%${formatBenchmarkCountDetails(me, config.priceStrategy)}</div>
+      <div class="sub">偏差 ${me.deviation == null ? '—' : fmt(me.deviation,6)+'%'}${formatBenchmarkCountDetails(me, config.priceStrategy)}</div>
     </div>` : ''}
   `;
   gi('result-summary').innerHTML = sumHtml + WorkspaceUI.trace(result) + WorkspaceUI.resultTools(result);
@@ -568,7 +582,7 @@ function renderResult() {
       <td>${escapeHtml(b.name)}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
       <td>${fmt(b.price)}</td>
       <td>${b.priceRank}${b.priceTied?'（并列）':''}</td>
-      <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
+      <td>${b.deviation != null ? fmt(b.deviation,6) + '%' : '—'}</td>
       <td>${fmtPriceScore(b.priceScore, config.priceStrategy)}${b.specialFullScore ? '<br><small class="score-reason">技术最高且最低价满分</small>' : ''}</td>
       <td>${b.businessScore}</td>
       <td>${b.techScore}</td>
@@ -687,7 +701,7 @@ function renderPredictResultTable() {
       <td><strong>${b.priceRank}${b.priceTied?'（并列）':''}</strong></td>
       <td>${escapeHtml(b.name)}${b.isMe ? ' <span class="badge badge-yellow">目标</span>' : ''}</td>
       <td>${b.price > 0 ? '¥ ' + fmt(b.price) : '<span style="color:#bbb;">未填</span>'}</td>
-      <td>${b.deviation != null ? b.deviation + '%' : '—'}</td>
+      <td>${b.deviation != null ? fmt(b.deviation,6) + '%' : '—'}</td>
       <td><strong>${fmtPriceScore(b.priceScore, snapshot.strategy)}</strong>${b.specialFullScore ? '<br><small class="score-reason">技术最高且最低价满分</small>' : ''}</td>
     </tr>`).join('');
 
@@ -987,13 +1001,14 @@ function fmt(num, maximumFractionDigits = 2, minimumFractionDigits = 0) {
   return Number(num).toLocaleString('zh-CN', { maximumFractionDigits, minimumFractionDigits });
 }
 function fmtBenchmark(num, strategy) {
-  return strategy === 'tieredTrimmedBenchmark' ? fmt(num, 6, 6) : fmt(num);
+  return ['tieredTrimmedBenchmark','piecewiseAverage'].includes(strategy) ? fmt(num, 6, 6) : fmt(num);
 }
 function fmtPriceScore(score, strategy = State.config.priceStrategy) {
   return Number(score).toFixed(2);
 }
 function formatBenchmarkCountDetails(bidder, strategy) {
   if (bidder?.validBidCount == null) return '';
+  if (strategy === 'piecewiseAverage') return `；参与${bidder.validBidCount}个，全部纳入算术均值`;
   if (strategy === 'tieredTrimmedBenchmark') {
     return `；有效${bidder.validBidCount}个，去两端各${bidder.trimCount}个，纳入平均${bidder.includedBidCount}个`;
   }

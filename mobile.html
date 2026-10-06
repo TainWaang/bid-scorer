@@ -517,6 +517,7 @@
           <select id="m-strategy">
             <option value="lowestPrice">最低价法</option>
             <option value="averagePrice" selected>平均价法</option>
+            <option value="piecewiseAverage">均价基准＋节点分段插值</option>
             <option value="outlierFilteredBenchmark">高价阈值剔除×系数平均价法</option>
             <option value="compositePrice">复合基准价法</option>
             <option value="fixedBenchmark">固定基准价法</option>
@@ -695,7 +696,8 @@ const S = {
     businessWeight: 20, priceWeight: 40, techWeight: 40,
     businessFull: 100, priceFull: 100, techFull: 100,
     priceStrategy: 'averagePrice',
-    strategyParams: { deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, outlierCutoffMultiple:1.5, outlierBenchmarkFactor:0.95, outlierHighDeduct:0.8, outlierLowDeduct:0.3, outlierMinScore:0, outlierDeviationDecimals:2, outlierFullScore:46, outlierSpecialFullScore:1, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1, tierHighThreshold:10, tierMidThreshold:5, tierHighTrim:2, tierMidTrim:1, benchmarkFactor:0.95, benchmarkDecimals:6, tierBaseScore:35, tierHighDeduct:0.5, tierLowAdd:0.5, tierMinScore:30, tierMaxScore:40 },
+    strategyParams: { piecewiseNodes:Scoring.DEFAULT_PIECEWISE_NODES, piecewiseLeftScore:80, piecewiseRightScore:60, piecewiseScoreDecimals:-1,
+      deductHigh:0.5, deductLow:0.3, avgBaseScore:80, avgLowAdd:1, avgHighDeduct:1, avgMaxScore:100, avgMinScore:0, outlierCutoffMultiple:1.5, outlierBenchmarkFactor:0.95, outlierHighDeduct:0.8, outlierLowDeduct:0.3, outlierMinScore:0, outlierDeviationDecimals:2, outlierFullScore:46, outlierSpecialFullScore:1, weightLow:0.5, weightAvg:0.5, benchmark:0, lowerPct:3, upperPct:3, deductOut:1, trimCount:1, tierHighThreshold:10, tierMidThreshold:5, tierHighTrim:2, tierMidTrim:1, benchmarkFactor:0.95, benchmarkDecimals:6, tierBaseScore:35, tierHighDeduct:0.5, tierLowAdd:0.5, tierMinScore:30, tierMaxScore:40 },
   },
   bidders: [
     { id:'my', name:'目标方案', price:0, businessScore:80, techScore:85, isMe:true  },
@@ -787,6 +789,7 @@ function renderStrategyParams() {
   const container = gi('m-strat-params');
 
   const tips = {
+    piecewiseAverage: 'A为参与样本经复核价格的算术均值，不去高低、不乘系数；K=(价格-A)/A×100%。每行填写“百分数 得分”，如 -5 100。节点严格递增；首末分数分别等于左右端固定分。不合格样本请停用。参考节点使用100分制，三项分值和满分仍独立设置。',
     lowestPrice:    '最低报价得满分，其他按比例扣分，无需额外参数。',
     averagePrice:   '基准价 = 所有报价算术平均值；平均价得分、加扣分斜率和上下限均可配置。',
     outlierFilteredBenchmark: '达到全部有效报价初始均值×阈值的高价不参与基准价计算；其余均值×系数。高低两侧均扣分；技术最高且有效报价最低时满分。',
@@ -808,6 +811,9 @@ function renderStrategyParams() {
     </div>`;
 
   const extras = {
+    piecewiseAverage: `<div class="field"><label for="m-piecewise-nodes">偏差率节点（百分数）与得分</label><textarea id="m-piecewise-nodes" data-key="piecewiseNodes" rows="14" spellcheck="false">${escapeHtml(p.piecewiseNodes ?? Scoring.DEFAULT_PIECEWISE_NODES)}</textarea></div>
+    <div class="field-row"><div class="field"><label>左端固定分（含首节点）</label><input type="number" data-key="piecewiseLeftScore" value="${p.piecewiseLeftScore??80}" min="0" step="any" inputmode="decimal"></div><div class="field"><label>右端固定分（含末节点）</label><input type="number" data-key="piecewiseRightScore" value="${p.piecewiseRightScore??60}" min="0" step="any" inputmode="decimal"></div></div>
+    <div class="field"><label for="m-piecewise-rounding">价格分舍入口径</label><select id="m-piecewise-rounding" data-key="piecewiseScoreDecimals">${[-1,0,1,2,3,4,5,6].map(n=>`<option value="${n}" ${Number(p.piecewiseScoreDecimals??-1)===n?'selected':''}>${n===-1?'保留计算精度（显示两位）':`先四舍五入至${n}位`}</option>`).join('')}</select></div><p class="note">A和K不提前舍入。-5和-3两个节点同为100分时，整个区间均得100分；其余相邻节点线性插值。</p>`,
     lowestPrice: '',
     averagePrice: `<div class="field-row">
       <div class="field"><label>平均价得分</label><input type="number" data-key="avgBaseScore" value="${p.avgBaseScore ?? 80}" step="0.5" inputmode="decimal"></div>
@@ -879,9 +885,9 @@ function renderStrategyParams() {
 
   container.innerHTML = `<div class="strat-tip">${tips[s]||''}</div>${extras[s]||''}`;
 
-  container.querySelectorAll('input[data-key]').forEach(el => {
+  container.querySelectorAll('[data-key]').forEach(el => {
     el.addEventListener('input', () => {
-      S.config.strategyParams[el.dataset.key] = +el.value;
+      S.config.strategyParams[el.dataset.key] = el.dataset.key === 'piecewiseNodes' ? el.value : +el.value;
       if (el.dataset.key === 'tierMaxScore' && S.config.priceStrategy === 'tieredTrimmedBenchmark') {
         S.config.priceFull = +el.value || 40;
         gi('m-pf').value = S.config.priceFull;
@@ -1024,7 +1030,7 @@ function renderResult() {
     </div>`;
     if (me.benchmark) {
       html += `<div class="benchmark-tip">
-        评分基准价：¥ ${fmtBenchmark(me.benchmark, config.priceStrategy)}&emsp;目标偏差：${me.deviation??'-'}%
+        评分基准价：¥ ${fmtBenchmark(me.benchmark, config.priceStrategy)}&emsp;目标偏差：${me.deviation==null?'—':fmtDecimal(me.deviation,6)+'%'}
         ${formatMobileBenchmarkCountDetails(me, config.priceStrategy)}
       </div>`;
     }
@@ -1045,7 +1051,7 @@ function renderResult() {
         <div class="rank-meta-item">商务 <span>${b.businessScore}</span></div>
         <div class="rank-meta-item">价格 <span>${fmtPriceScore(b.priceScore, config.priceStrategy)}${b.specialFullScore?'（技术最高且最低价满分）':''}</span></div>
         <div class="rank-meta-item">技术 <span>${b.techScore}</span></div>
-        ${b.deviation!=null?`<div class="rank-meta-item">偏差 <span>${b.deviation}%</span></div>`:''}
+        ${b.deviation!=null?`<div class="rank-meta-item">偏差 <span>${fmtDecimal(b.deviation,6)}%</span></div>`:''}
       </div>
     </div>`;
   });
@@ -1304,6 +1310,7 @@ function fmtDecimal(n, maximumFractionDigits = 2) {
   return Number(n).toLocaleString('zh-CN', { maximumFractionDigits });
 }
 function fmtBenchmark(n, strategy) {
+  if (strategy === 'piecewiseAverage') return Number(n).toLocaleString('zh-CN',{minimumFractionDigits:6,maximumFractionDigits:6});
   if (strategy === 'outlierFilteredBenchmark') return fmtDecimal(n, 2);
   if (strategy !== 'tieredTrimmedBenchmark') return fmt(n);
   return Number(n).toLocaleString('zh-CN',{minimumFractionDigits:6,maximumFractionDigits:6});
@@ -1313,6 +1320,7 @@ function fmtPriceScore(score, strategy = S.config.priceStrategy) {
 }
 function formatMobileBenchmarkCountDetails(bidder, strategy) {
   if (bidder?.validBidCount == null) return '';
+  if (strategy === 'piecewiseAverage') return `<br>参与${bidder.validBidCount}个，全部纳入算术均值`;
   if (strategy === 'tieredTrimmedBenchmark') {
     return `<br>有效${bidder.validBidCount}个，去最高和最低各${bidder.trimCount}个，纳入平均${bidder.includedBidCount}个`;
   }

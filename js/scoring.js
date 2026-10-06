@@ -4,6 +4,38 @@
  */
 
 const Scoring = (() => {
+  const DEFAULT_PIECEWISE_NODES = '-11 80\n-10 90\n-9 93\n-8 95\n-7 97\n-6 99\n-5 100\n-3 100\n-2 95\n-1 90\n0 85\n1 80\n2 75\n3 60';
+
+  function parsePiecewiseNodes(text = DEFAULT_PIECEWISE_NODES) {
+    if (typeof text !== 'string' || text.length > 12000) throw new Error('插值节点必须为不超过12000字的文本');
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (lines.length < 2 || lines.length > 200) throw new Error('插值节点须为2到200行');
+    const nodes = lines.map((line, i) => {
+      const match = line.match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*%?(?:\s*[:：,，;；]\s*|\s+)([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/);
+      if (!match) throw new Error(`第${i + 1}行节点格式错误，请填写“偏差百分数 得分”，例如 -5 100`);
+      const k = Number(match[1]), score = Number(match[2]);
+      if (!Number.isFinite(k) || !Number.isFinite(score)) throw new Error(`第${i + 1}行节点必须是有限数值`);
+      return { k, score };
+    });
+    for (let i = 1; i < nodes.length; i++) {
+      if (nodes[i].k <= nodes[i - 1].k) throw new Error('偏差率节点必须严格递增，不得重复');
+    }
+    return nodes;
+  }
+
+  function interpolateDeviation(k, nodes, leftScore, rightScore) {
+    if (!Number.isFinite(k)) throw new Error('偏差率不是有效数值');
+    // Only absorb floating-point noise at exact nodes, without rounding K or scores.
+    const nearest = nodes.find(node => Math.abs(k - node.k) <= Number.EPSILON * Math.max(100, Math.abs(k), Math.abs(node.k)) * 4);
+    if (nearest) return nearest.score;
+    if (k <= nodes[0].k) return leftScore;
+    if (k >= nodes[nodes.length - 1].k) return rightScore;
+    for (let i = 1; i < nodes.length; i++) {
+      const low = nodes[i - 1], high = nodes[i];
+      if (k <= high.k) return low.score + (k - low.k) * (high.score - low.score) / (high.k - low.k);
+    }
+    throw new Error('无法定位插值区间');
+  }
 
   /**
    * 将单个报价输入标准化为正数。
@@ -52,6 +84,18 @@ const Scoring = (() => {
       const full = Number(fullScore);
       if (!Number.isFinite(full) || full <= 0) errors.push('价格满分必须大于0');
       if (!Object.prototype.hasOwnProperty.call(PriceStrategies, strategy)) errors.push('请选择有效的价格策略');
+      if (strategy === 'piecewiseAverage') {
+        const left = number('piecewiseLeftScore', 80, '左端固定分');
+        const right = number('piecewiseRightScore', 60, '右端固定分');
+        if (left > full || right > full) errors.push('两端固定分不得超过价格满分');
+        const decimals = number('piecewiseScoreDecimals', -1, '得分舍入位数', -1, true);
+        if (decimals > 6) errors.push('得分舍入位数须为-1（不提前舍入）或0到6');
+        try {
+          const nodes = parsePiecewiseNodes(params.piecewiseNodes ?? DEFAULT_PIECEWISE_NODES);
+          if (nodes.some(n => n.score < 0 || n.score > full)) errors.push('节点得分必须在0到价格满分之间');
+          if (nodes[0].score !== left || nodes[nodes.length - 1].score !== right) errors.push('首末节点得分须分别等于左端、右端固定分');
+        } catch (error) { errors.push(error.message); }
+      }
       if (['averagePrice', 'tieredTrimmedBenchmark'].includes(strategy)) {
         const tier = strategy === 'tieredTrimmedBenchmark';
         const base = number(tier ? 'tierBaseScore' : 'avgBaseScore', tier ? 35 : 80, '基础分');
@@ -145,6 +189,28 @@ const Scoring = (() => {
    * 价格评分策略
    */
   const PriceStrategies = {
+
+    /** Arithmetic mean of reviewed eligible prices, followed by configurable K/score interpolation. */
+    piecewiseAverage(bids, fullScore, params = {}) {
+      const errors = validateStrategyConfig('piecewiseAverage', fullScore, params);
+      if (errors.length) throw new Error(errors.join('；'));
+      const nodes = parsePiecewiseNodes(params.piecewiseNodes ?? DEFAULT_PIECEWISE_NODES);
+      const leftScore = Number(params.piecewiseLeftScore ?? 80);
+      const rightScore = Number(params.piecewiseRightScore ?? 60);
+      const decimals = Number(params.piecewiseScoreDecimals ?? -1);
+      const { normalizedBidders, validBidders } = summarizeBidValidity(bids);
+      const benchmark = validBidders.length
+        ? validBidders.reduce((sum, b) => sum + b.price, 0) / validBidders.length : 0;
+      if (!Number.isFinite(benchmark)) throw new Error('报价合计超出计算范围');
+      return normalizedBidders.map(b => {
+        const metadata = {benchmark, validBidCount:validBidders.length, includedBidCount:validBidders.length};
+        if (b.price <= 0 || b.enabled === false || !benchmark) return {...b,...metadata,priceScore:0,deviation:null};
+        const deviation = (b.price - benchmark) / benchmark * 100;
+        const rawPriceScore = interpolateDeviation(deviation, nodes, leftScore, rightScore);
+        const priceScore = decimals === -1 ? rawPriceScore : roundHalfAwayFromZero(rawPriceScore, decimals);
+        return {...b,...metadata,deviation,rawPriceScore,priceScore};
+      });
+    },
 
     /**
      * 1. 最低价法
@@ -473,6 +539,11 @@ const Scoring = (() => {
   function validateConfig(config, bidders = [], priceOnly = false) {
     const errors = validateStrategyConfig(config.priceStrategy, config.priceFull ?? 100, config.strategyParams || {});
     for (const b of bidders) if (b.enabled !== false && b.priceInputError) errors.push(`“${b.name || '样本'}”报价格式错误`);
+    if (config.priceStrategy === 'piecewiseAverage') {
+      for (const b of bidders) {
+        if (b.enabled !== false && !b.priceInputError && normalizePriceInput(b.price) <= 0) errors.push(`“${b.name || '样本'}”尚无有效评标价，请补齐或停用该样本后计算均值`);
+      }
+    }
     if (!priceOnly) {
       errors.push(...validateComponentScoreConfig(config, bidders));
       const weights = ['businessWeight', 'priceWeight', 'techWeight'].map(key => Number(config[key]));
@@ -832,8 +903,15 @@ const Scoring = (() => {
 
   function describeRule(config) {
     const p = config.strategyParams || {}, full = config.priceFull ?? 100;
-    const names = {lowestPrice:'最低价比例法',averagePrice:'平均价法',outlierFilteredBenchmark:'高价阈值剔除法',compositePrice:'复合基准价法',fixedBenchmark:'固定基准价法',trimmedAverage:'去高去低平均价法',tieredTrimmedBenchmark:'分档去高去低法',intervalScore:'区间得分法'};
+    const names = {lowestPrice:'最低价比例法',averagePrice:'平均价法',piecewiseAverage:'均价基准＋节点分段插值',outlierFilteredBenchmark:'高价阈值剔除法',compositePrice:'复合基准价法',fixedBenchmark:'固定基准价法',trimmedAverage:'去高去低平均价法',tieredTrimmedBenchmark:'分档去高去低法',intervalScore:'区间得分法'};
     const s = config.priceStrategy;
+    if (s === 'piecewiseAverage') {
+      let nodes;
+      try { nodes = parsePiecewiseNodes(p.piecewiseNodes ?? DEFAULT_PIECEWISE_NODES); }
+      catch (error) { return `${names[s]}：${error.message}`; }
+      const decimals = Number(p.piecewiseScoreDecimals ?? -1);
+      return `${names[s]}：A为所有参与样本经复核价格的算术均值，不去高低、不乘系数；K=(价格-A)/A×100%。节点（K%→分）：${nodes.map(n=>`${n.k}→${n.score}`).join('；')}。K≤${nodes[0].k}%固定${p.piecewiseLeftScore??80}分，K≥${nodes[nodes.length-1].k}%固定${p.piecewiseRightScore??60}分，中间按相邻节点线性插值。A和K不提前舍入；${decimals===-1?'价格分保留计算精度，界面显示两位':`价格分先四舍五入至${decimals}位`}，再折算综合分（综合分保留四位）。同分并列；显示相同的两位小数不一定代表计算值完全相同。`;
+    }
     let formula = '';
     if(s==='lowestPrice')formula=`价格分 = ${full} × 最低有效报价 ÷ 本人报价`;
     if(s==='averagePrice')formula=`基准价为有效报价均值；基础分${p.avgBaseScore??80}；高于每1%扣${p.avgHighDeduct??1}，低于每1%加${p.avgLowAdd??1}；范围${p.avgMinScore??0}～${p.avgMaxScore??full}分`;
@@ -848,6 +926,9 @@ const Scoring = (() => {
 
   return {
     PriceStrategies,
+    DEFAULT_PIECEWISE_NODES,
+    parsePiecewiseNodes,
+    interpolateDeviation,
     normalizePriceInput,
     summarizeBidValidity,
     validateStrategyConfig,
@@ -865,6 +946,7 @@ const Scoring = (() => {
     strategyNames: {
       lowestPrice:     '最低价法',
       averagePrice:    '平均价法',
+      piecewiseAverage: '均价基准＋节点分段插值',
       outlierFilteredBenchmark: '高价阈值剔除×系数平均价法',
       compositePrice:  '复合基准价法',
       fixedBenchmark:  '固定基准价法',
