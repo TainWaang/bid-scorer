@@ -9,10 +9,10 @@
 </head>
 <body>
 
-<h1>报价评分情景模拟器
-  <span>独立数据输入 · 公开公式计算 · 多情景敏感性分析</span>
-  <a href="mobile.html" style="float:right;font-size:13px;color:rgba(255,255,255,0.8);text-decoration:none;background:rgba(255,255,255,0.15);padding:4px 12px;border-radius:20px;margin-top:2px;">手机版</a>
-</h1>
+<header class="app-header">
+  <div><h1>报价评分情景模拟器</h1><p>独立数据输入 · 公开公式计算 · 多情景敏感性分析</p></div>
+  <a href="mobile.html">手机版</a>
+</header>
 
 <div class="container">
 
@@ -41,21 +41,24 @@
       <div class="card-title">综合分值构成与评分口径
         <span id="weight-sum" class="weight-sum err">分值合计：100</span>
       </div>
-      <div class="form-row">
+      <div class="score-config-grid">
+        <fieldset class="form-section"><legend>综合分值构成</legend><div class="form-grid form-grid-three">
         <div class="form-group">
-          <label>商务分值构成</label>
+          <label for="cfg-bw">商务分值构成</label>
           <input type="number" id="cfg-bw" value="20" min="0" max="100" step="5">
         </div>
         <div class="form-group">
-          <label>价格分值构成</label>
+          <label for="cfg-pw">价格分值构成</label>
           <input type="number" id="cfg-pw" value="40" min="0" max="100" step="5">
         </div>
         <div class="form-group">
-          <label>技术分值构成</label>
+          <label for="cfg-tw">技术分值构成</label>
           <input type="number" id="cfg-tw" value="40" min="0" max="100" step="5">
         </div>
+        </div></fieldset>
+        <fieldset class="form-section"><legend>评分满分口径</legend><div class="form-grid form-grid-three">
         <div class="form-group">
-          <label>商务录入满分</label>
+          <label for="cfg-business-full">商务录入满分</label>
           <input type="number" id="cfg-business-full" value="100" min="0.01" step="0.5">
         </div>
         <div class="form-group">
@@ -63,9 +66,10 @@
           <input type="number" id="cfg-price-full" value="100" min="0.01" step="any">
         </div>
         <div class="form-group">
-          <label>技术录入满分</label>
+          <label for="cfg-tech-full">技术录入满分</label>
           <input type="number" id="cfg-tech-full" value="100" min="0.01" step="0.5">
         </div>
+        </div></fieldset>
       </div>
       <p class="note">三项分值构成合计100。商务、技术录入满分按实际分数填写；价格公式满分按招标公式填写。例如价格占35分、公式从100分扣分时，价格分值填35，价格公式满分填100。</p>
       <div id="price-scale-note" aria-live="polite"></div>
@@ -74,8 +78,8 @@
     <div class="card">
       <div class="card-title">价格评分策略</div>
       <div class="form-row">
-        <div class="form-group" style="min-width:280px;">
-          <label>评分方法</label>
+        <div class="form-group strategy-select">
+          <label for="cfg-strategy">评分方法</label>
           <select id="cfg-strategy"></select>
         </div>
       </div>
@@ -84,7 +88,7 @@
 
     <div class="card">
       <div class="card-title">快速加载预设方案</div>
-      <div class="form-row">
+      <div class="form-row preset-actions">
         <button class="btn btn-primary btn-sm" onclick="loadPreset('gov')">通用评分模板</button>
         <button class="btn btn-primary btn-sm" onclick="loadPreset('infra')">价格权重较高</button>
         <button class="btn btn-primary btn-sm" onclick="loadPreset('tech')">技术权重较高</button>
@@ -112,15 +116,17 @@
       <p class="note" style="margin-bottom:12px;">
         报价样本名称在“① 评分规则配置”中管理；价格得分由系统根据报价和当前评分方法自动计算。报价支持输入 4500000 或 4,500,000。
       </p>
-      <div class="table-wrap">
-        <table>
+      <p class="table-scroll-hint">窄屏可在表格内左右滑动，查看全部录入项。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="报价与评分录入表，可横向滚动">
+        <table class="bidder-input-table">
+          <colgroup><col style="width:8%"><col style="width:32%"><col style="width:24%"><col style="width:18%"><col style="width:18%"></colgroup>
           <thead>
             <tr>
-              <th style="width:50px;">序号</th>
-              <th style="width:120px;">名称</th>
-              <th style="width:150px;">报价（元）</th>
-              <th style="width:110px;">商务得分<br><small id="bidder-business-full-label">（满分100）</small></th>
-              <th style="width:110px;">技术得分<br><small id="bidder-tech-full-label">（满分100）</small></th>
+              <th>序号</th>
+              <th>名称</th>
+              <th>报价（元）</th>
+              <th>商务得分<br><small id="bidder-business-full-label">（满分100）</small></th>
+              <th>技术得分<br><small id="bidder-tech-full-label">（满分100）</small></th>
             </tr>
           </thead>
           <tbody id="bidder-tbody"></tbody>
@@ -139,8 +145,10 @@
       </div>
       <div class="card">
         <div class="card-title">综合评分明细</div>
-        <div class="table-wrap">
-          <table>
+        <p class="table-scroll-hint table-scroll-hint-wide">可在表格内左右滑动，查看全部评分明细。</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="综合评分明细表，可横向滚动">
+          <table class="composite-score-table">
+            <colgroup><col style="width:8%"><col style="width:18%"><col style="width:12%"><col style="width:7%"><col style="width:11%"><col style="width:9%"><col style="width:11%"><col style="width:8%"><col style="width:8%"><col style="width:8%"></colgroup>
             <thead id="result-table-head"></thead>
             <tbody id="result-table-body"></tbody>
           </table>
@@ -169,12 +177,13 @@
       <p class="note" style="margin-bottom:12px;">
         输入假设报价，按当前规则计算价格得分与排名。这里与“③ 综合评分”共用报价数据；修改后会保存到当前项目。综合分含商务、技术得分。
       </p>
-      <div class="table-wrap">
-        <table>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="假设报价录入表">
+        <table class="predict-input-table">
+          <colgroup><col style="width:55%"><col style="width:45%"></colgroup>
           <thead>
             <tr>
-              <th style="width:120px;">报价样本</th>
-              <th style="width:180px;">假设报价（元）</th>
+              <th>报价样本</th>
+              <th>假设报价（元）</th>
             </tr>
           </thead>
           <tbody id="predict-tbody"></tbody>
@@ -195,28 +204,28 @@
 
     <div class="card">
       <div class="card-title">最优报价搜索</div>
-      <div class="form-group" style="min-width:280px;margin-bottom:12px;">
-        <label>本次独立分析目标（每次仅选择一个）</label>
+      <div class="form-group form-block">
+        <label for="opt-target">本次独立分析目标（每次仅选择一个）</label>
         <select id="opt-target"></select>
       </div>
-      <div class="form-group" style="width:100%;margin-bottom:12px;">
-        <label>其他报价样本情景（每行一个情景，不包含目标报价）</label>
+      <div class="form-group form-block">
+        <label for="opt-scenarios">其他报价样本情景（每行一个情景，不包含目标报价）</label>
         <textarea id="opt-scenarios" rows="6" placeholder="总5个: 1010000, 1030000, 1070000, 1090000&#10;总8个: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11个: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
       </div>
-      <div class="form-row">
+      <div class="form-grid search-range-grid">
         <div class="form-group">
-          <label>最低搜索价格（元）</label>
+          <label for="opt-min">最低搜索价格（元）</label>
           <input type="number" id="opt-min" placeholder="如 800000" step="10000">
         </div>
         <div class="form-group">
-          <label>最高搜索价格（元）</label>
+          <label for="opt-max">最高搜索价格（元）</label>
           <input type="number" id="opt-max" placeholder="如 1200000" step="10000">
         </div>
         <div class="form-group">
-          <label>搜索步长（元）</label>
+          <label for="opt-step">搜索步长（元）</label>
           <input type="number" id="opt-step" placeholder="如 1000" step="any" min="0">
         </div>
-        <div style="display:flex;align-items:flex-end;">
+        <div class="form-actions">
           <button class="btn btn-success" id="btn-search-optimal">搜索最优报价</button>
         </div>
       </div>
@@ -228,7 +237,8 @@
     <div class="card" id="sensitivity-card" style="margin-top:16px;">
       <div class="card-title">价格敏感性分析</div>
       <p class="note" style="margin-bottom:10px;">展示不同目标报价在全部自定义情景中的价格得分并列第一比例、最低分和平均分</p>
-      <div class="table-wrap sensitivity-chart">
+      <p class="table-scroll-hint">窄屏可在表格内左右滑动。</p>
+      <div class="table-wrap sensitivity-chart" tabindex="0" role="region" aria-label="价格敏感性分析表，可横向滚动">
         <table>
           <thead>
             <tr>
@@ -253,25 +263,25 @@
       <p class="note" style="margin-bottom:12px;">
         每套方案独立设置目标报价与商务/技术得分假设，其他样本沿用“③ 综合评分”中的配置。
       </p>
-      <div class="form-row">
-        <div class="form-group" style="min-width:220px;">
-          <label>方案名称</label>
+      <div class="form-grid scenario-form-grid">
+        <div class="form-group scenario-name-field">
+          <label for="scenario-name">方案名称</label>
           <input type="text" id="scenario-name" placeholder="如：保守方案 / 激进方案">
         </div>
         <div class="form-group">
-          <label>目标报价（元）</label>
+          <label for="scenario-my-price">目标报价（元）</label>
           <input type="number" id="scenario-my-price" placeholder="输入报价"
             style="border-color:#2e6da4;background:#eff6ff;">
         </div>
         <div class="form-group">
-          <label>商务得分（预估）<small id="scenario-business-full-label">（满分100）</small></label>
+          <label for="scenario-my-biz">商务得分（预估）<small id="scenario-business-full-label">（满分100）</small></label>
           <input type="number" id="scenario-my-biz" min="0" max="100" step="0.5" placeholder="0~100">
         </div>
         <div class="form-group">
-          <label>技术得分（预估）<small id="scenario-tech-full-label">（满分100）</small></label>
+          <label for="scenario-my-tech">技术得分（预估）<small id="scenario-tech-full-label">（满分100）</small></label>
           <input type="number" id="scenario-my-tech" min="0" max="100" step="0.5" placeholder="0~100">
         </div>
-        <div style="display:flex;align-items:flex-end;gap:8px;">
+        <div class="form-actions scenario-form-actions">
           <button class="btn btn-success" id="btn-save-scenario">计算并保存</button>
           <button class="btn btn-warning" id="btn-clear-scenarios">清空所有</button>
         </div>

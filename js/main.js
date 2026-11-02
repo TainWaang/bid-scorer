@@ -149,13 +149,12 @@ function renderBidderNamesPanel() {
   list.innerHTML = '';
   State.bidders.forEach((b, idx) => {
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;';
+    row.className = 'bidder-name-row';
     row.innerHTML = `
-      <span class="badge ${b.isMe ? 'badge-yellow' : 'badge-blue'}" style="min-width:36px;text-align:center;">
+      <span class="badge ${b.isMe ? 'badge-yellow' : 'badge-blue'}">
         ${b.isMe ? '目标' : String(idx)}
       </span>
-      <input type="text" value="${escapeHtml(b.name)}" placeholder="样本名称"
-        style="width:200px;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"
+      <input type="text" value="${escapeHtml(b.name)}" placeholder="样本名称" aria-label="${b.isMe ? '目标样本名称' : '样本' + idx + '名称'}"
         oninput="updateBidderName(${idx}, this.value)">
       ${!b.isMe ? `<button class="btn btn-danger" onclick="removeBidder(${idx})">删除</button>` : ''}
     `;
@@ -182,16 +181,14 @@ function renderBidderTable() {
       <td style="font-weight:${b.isMe ? 'bold' : 'normal'};">${escapeHtml(b.name)}</td>
       <td><input type="text" value="${escapeHtml(WorkspaceUI.priceInputValue(b))}" placeholder="输入报价"
           inputmode="decimal" autocomplete="off"
-          style="width:130px;padding:4px 6px;border:1px solid ${b.isMe ? '#2e6da4' : '#d1d5db'};border-radius:4px;${b.isMe ? 'background:#eff6ff;' : ''}"
+          class="table-input${b.isMe ? ' my-bid' : ''}" aria-label="${escapeHtml(b.name)}报价"
           oninput="updateBidderPriceInput(${idx},this)"
           onblur="formatBidderPriceInput(${idx},this)"></td>
       <td><input type="number" value="${b.businessScore}" min="0" max="${businessFull}" step="0.1"
-          class="${b.businessScore < 0 || b.businessScore > businessFull ? 'score-input-invalid' : ''}"
-          style="width:80px;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;"
+          class="table-input ${b.businessScore < 0 || b.businessScore > businessFull ? 'score-input-invalid' : ''}" aria-label="${escapeHtml(b.name)}商务得分"
           oninput="updateBidderScore(${idx},'businessScore',this)"></td>
       <td><input type="number" value="${b.techScore}" min="0" max="${techFull}" step="0.1"
-          class="${b.techScore < 0 || b.techScore > techFull ? 'score-input-invalid' : ''}"
-          style="width:80px;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;"
+          class="table-input ${b.techScore < 0 || b.techScore > techFull ? 'score-input-invalid' : ''}" aria-label="${escapeHtml(b.name)}技术得分"
           oninput="updateBidderScore(${idx},'techScore',this)"></td>
     `;
     tbody.appendChild(tr);
@@ -332,7 +329,7 @@ function renderResult() {
   const theadHtml = `
     <tr>
       <th>综合排名</th><th>报价样本</th><th>报价（元）</th><th>价格排名</th>
-      <th>与基准价偏差</th>
+      <th>与基准价<br>偏差</th>
       <th>价格原始分<br><small>（公式满分${config.priceFull}）</small></th>
       <th>价格计入综合分<br><small>（分值${config.priceWeight}）</small></th>
       <th>商务得分<br><small>（满分${fmt(config.businessFull)}）</small></th>
@@ -374,11 +371,10 @@ function renderPredictTable() {
     if (b.isMe) tr.classList.add('my-row');
     tr.innerHTML = `
       <td>${b.isMe ? '<span class="badge badge-yellow">目标</span> ' : ''}${escapeHtml(b.name)}</td>
-      <td><input type="text" class="predict-price-input" data-id="${b.id}"
+      <td><input type="text" class="predict-price-input table-input${b.isMe ? ' my-bid' : ''}" data-id="${b.id}" aria-label="${escapeHtml(b.name)}假设报价"
           value="${escapeHtml(WorkspaceUI.priceInputValue(b))}" placeholder="输入预测报价"
           inputmode="decimal" autocomplete="off"
-          oninput="updateBidderPriceById('${b.id}', this.value)"
-          style="width:150px;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;${b.isMe ? 'border-color:#2e6da4;background:#eff6ff;' : ''}"></td>
+          oninput="updateBidderPriceById('${b.id}', this.value)"></td>
     `;
     tbody.appendChild(tr);
   });
@@ -617,8 +613,10 @@ async function renderOptimize() {
   gi('optimize-result-box').innerHTML = `${optHtml}${RuleUI.scaleHtml(config)}
     <div class="card" style="margin-top:16px;">
       <div class="card-title">推荐报价在各情景中的结果</div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>情景</th><th>有效样本数</th><th>基准价</th><th>目标价格原始分</th><th>价格计入综合分</th><th>价格排名</th><th>去除及纳入</th></tr></thead>
+      <p class="table-scroll-hint table-scroll-hint-wide">可在表格内左右滑动，查看全部情景明细。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="推荐报价逐情景结果表，可横向滚动"><table class="optimization-detail-table">
+        <colgroup><col style="width:25%"><col style="width:8%"><col style="width:18%"><col style="width:12%"><col style="width:14%"><col style="width:10%"><col style="width:13%"></colgroup>
+        <thead><tr><th>情景</th><th>有效<br>样本数</th><th>基准价</th><th>目标价格原始分<small>公式满分${config.priceFull}</small></th><th>价格计入综合分<small>分值${config.priceWeight}</small></th><th>价格排名</th><th>去除及纳入</th></tr></thead>
         <tbody>${detailRows}</tbody>
       </table></div>
     </div>`;
@@ -713,8 +711,8 @@ function renderScenarios() {
       <td>${s.businessScore}</td>
       <td>${s.techScore}</td>
       <td>${fmtPriceScore(s.priceScore, s.strategy)}${s.snapshot?`<small class="ws-score-contribution"> / ${s.snapshot.config.priceFull}<br>计入综合分 ${RuleUI.contributionHtml(s.priceScore,s.snapshot.config)}</small>`:'<small class="ws-score-contribution">旧版未记录满分</small>'}</td>
-      <td>
-        <span style="display:inline-block;width:${Math.round(s.total/maxTotal*100)}px;height:12px;background:#2e6da4;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>
+      <td class="scenario-total-cell">
+        <span class="rank-bar" style="width:${maxTotal > 0 ? Math.round(s.total/maxTotal*100) : 0}%;"></span>
         <strong>${s.total.toFixed(4)}</strong>
       </td>
       <td><span class="badge ${s.rank===1?'badge-green':s.rank<=2?'badge-blue':'badge-red'}">第${s.rank}名</span></td>
@@ -723,14 +721,16 @@ function renderScenarios() {
     </tr>`).join('');
 
   container.innerHTML = `${WorkspaceUI.comparisonHint()}
-    <table>
+    <p class="table-scroll-hint table-scroll-hint-wide">可在表格内左右滑动，查看全部方案与操作。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="方案对比表，可横向滚动"><table class="scenario-compare-table">
+      <colgroup><col style="width:22%"><col style="width:14%"><col style="width:11%"><col style="width:6%"><col style="width:6%"><col style="width:12%"><col style="width:9%"><col style="width:6%"><col style="width:9%"><col style="width:5%"></colgroup>
       <thead><tr>
         <th>方案名称</th><th>价格方法</th><th>目标报价</th>
         <th>商务得分</th><th>技术得分</th><th>价格得分</th>
         <th>综合得分</th><th>排名</th><th>保存时间</th><th>操作</th>
       </tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table></div>`;
 }
 
 function removeScenario(idx) {

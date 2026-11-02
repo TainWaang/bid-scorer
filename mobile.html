@@ -131,7 +131,7 @@
       width: 20%; height: 100%;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 16px 14px 24px;
+      padding: 20px 14px 28px;
       scrollbar-width: thin;
     }
     .page > * { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; }
@@ -141,14 +141,15 @@
       background: var(--card);
       border: 1px solid rgba(226,232,240,0.9);
       border-radius: var(--radius-lg);
-      padding: 16px;
-      margin-bottom: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
       box-shadow: var(--shadow-sm);
     }
     .card-head {
       font-size: 15px; font-weight: 750; color: var(--text);
-      margin-bottom: 14px;
-      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 20px;
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+      line-height: 1.7;
     }
     .card-head::before {
       content: ''; display: block;
@@ -158,11 +159,12 @@
     .score-full-head { margin-top: 16px; }
 
     /* ── Form ── */
-    .field { margin-bottom: 16px; min-width: 0; }
+    .field { margin-bottom: 20px; min-width: 0; }
     .field:last-child { margin-bottom: 0; }
     .field label {
       display: block; font-size: 12px; color: var(--text2);
       margin-bottom: 6px; font-weight: 600;
+      line-height: 1.6;
     }
     .field input, .field select, .field textarea {
       width: 100%; min-height: 46px; padding: 11px 13px;
@@ -189,9 +191,10 @@
     .field input.price-input-invalid {
       border-color: var(--red); background: var(--red-soft);
     }
-    .field-row { display: flex; gap: 10px; }
-    .field-row .field { flex: 1; margin-bottom: 0; }
-    .field-row + .field, .field-row + .field-row { margin-top: 16px; }
+    .field-row { display: flex; gap: 12px; align-items: stretch; }
+    .field-row .field { display: flex; flex-direction: column; flex: 1; margin-bottom: 0; }
+    .field-row .field label { flex: 1; }
+    .field-row + .field, .field-row + .field-row { margin-top: 20px; }
     #m-strat-params > .field,
     #m-strat-params > .field-row { margin-top: 12px; }
 
@@ -233,32 +236,26 @@
     .bidder-card {
       background: var(--card);
       border-radius: var(--radius-lg);
-      padding: 16px;
-      margin-bottom: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
       border: 1px solid var(--border);
       box-shadow: var(--shadow-sm);
     }
     .bidder-card.me { border-color: #93c5fd; background: linear-gradient(180deg, var(--blue-soft), #fff 75%); }
     .bidder-head {
       display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 12px;
+      gap: 12px; margin-bottom: 16px;
     }
-    .bidder-name-wrap { display: flex; align-items: center; gap: 8px; }
     .badge {
       display: inline-block; padding: 3px 9px; border-radius: var(--radius-pill);
       font-size: 11px; font-weight: 600;
     }
     .badge-me { background: var(--blue); color: #fff; }
     .badge-comp { background: #e2e8f0; color: #475569; }
-    .bidder-name-input {
-      background: transparent; border: none; font-size: 15px;
-      font-weight: 600; color: var(--text); font-family: inherit;
-      width: 100px; padding: 0;
-    }
-    .bidder-name-input:focus { outline: none; border-bottom: 1.5px solid var(--blue); }
-    .scores-row { display: flex; gap: 8px; }
-    .score-field { flex: 1; }
-    .score-field label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+    .bidder-name-input { font-weight: 600; }
+    .scores-row { display: flex; gap: 12px; }
+    .score-field { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .score-field label { display: block; flex: 1; font-size: 12px; color: var(--text2); margin-bottom: 8px; line-height: 1.6; }
     .score-field input {
       width: 100%; min-height: 42px; padding: 8px 10px;
       border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
@@ -273,61 +270,63 @@
       background: var(--card); color: var(--text);
       border: 1px solid var(--border); border-left: 4px solid var(--border-strong);
       border-radius: var(--radius-lg);
-      padding: 16px;
-      margin-bottom: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
       position: relative; overflow: hidden;
       box-shadow: var(--shadow-sm);
     }
     .rank-card.first { background: var(--green-soft); border-color: #bbf7d0; border-left-color: var(--green); }
     .rank-card.second { background: var(--blue-soft); border-color: #bfdbfe; border-left-color: var(--blue); }
     .rank-card.other { background: var(--card); }
-    .rank-num {
-      position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-      font-size: 54px; font-weight: 900; color: var(--text3); opacity: 0.16; line-height: 1;
-    }
-    .rank-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; overflow-wrap: anywhere; }
-    .rank-total { font-size: 28px; font-weight: 900; margin-bottom: 8px; }
-    .rank-meta { display: flex; gap: 12px; flex-wrap: wrap; }
-    .rank-meta-item { font-size: 12px; color: var(--text2); }
-    .rank-meta-item span { font-weight: 700; font-size: 13px; }
+    .rank-card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+    .rank-num { padding: 5px 9px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); font-size: 12px; font-weight: 700; color: var(--text2); white-space: nowrap; }
+    .rank-name { font-size: 16px; font-weight: 700; line-height: 1.7; overflow-wrap: anywhere; }
+    .rank-total { font-size: 28px; font-weight: 900; margin: 12px 0 16px; font-variant-numeric: tabular-nums; }
+    .rank-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .rank-meta-item { min-width: 0; font-size: 12px; color: var(--text2); line-height: 1.7; overflow-wrap: anywhere; }
+    .rank-meta-item span { display: block; margin-top: 4px; font-weight: 700; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
 
     .my-summary {
       background: var(--hero-gradient);
-      border-radius: var(--radius-lg); padding: 18px; color: #fff;
-      margin-bottom: 14px; box-shadow: var(--shadow-md);
+      border-radius: var(--radius-lg); padding: 20px; color: #fff;
+      margin-bottom: 20px; box-shadow: var(--shadow-md);
     }
     .my-summary-title { font-size: 13px; opacity: 0.86; margin-bottom: 6px; }
     .my-summary-rank { font-size: clamp(34px, 10vw, 42px); font-weight: 900; line-height: 1; }
-    .my-summary-sub { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+    .my-summary-sub { font-size: 13px; opacity: 0.8; margin-top: 10px; line-height: 1.7; }
     .my-summary-scores {
-      display: grid; grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px; margin-top: 14px;
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px; margin-top: 20px;
     }
-    .my-score-item { background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); padding: 10px 6px; text-align: center; }
+    .my-score-item { min-width: 0; background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); padding: 12px; text-align: center; overflow-wrap: anywhere; }
     .my-score-item .si-label { font-size: 11px; opacity: 0.82; margin-bottom: 3px; }
     .my-score-item .si-val { font-size: 18px; font-weight: 800; }
+    .my-price-score { grid-column: 1 / -1; order: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; text-align: left; }
+    .my-price-score .ws-score-contribution { grid-column: 1 / -1; margin-top: 0; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.2); }
 
     /* ── Optimize ── */
     .opt-result {
       background: var(--hero-gradient);
-      border-radius: var(--radius-lg); padding: 18px; color: #fff;
-      margin-bottom: 14px; box-shadow: var(--shadow-md);
+      border-radius: var(--radius-lg); padding: 20px; color: #fff;
+      margin-bottom: 20px; box-shadow: var(--shadow-md);
     }
-    .opt-result-title { font-size: 13px; opacity: 0.86; margin-bottom: 8px; }
+    .opt-result-title { font-size: 13px; opacity: 0.86; margin-bottom: 12px; line-height: 1.8; overflow-wrap: anywhere; }
     .opt-price { font-size: clamp(26px, 8vw, 32px); font-weight: 900; margin-bottom: 4px; overflow-wrap: anywhere; }
-    .opt-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+    .opt-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+    .opt-meta-item { min-width: 0; line-height: 1.7; overflow-wrap: anywhere; }
+    .opt-meta-item:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
     .opt-meta-item .oml { font-size: 11px; opacity: 0.82; }
     .opt-meta-item .omv { font-size: 16px; font-weight: 700; }
     .result-context { font-size: 11px; opacity: 0.82; margin-top: 12px; line-height: 1.55; }
 
     /* ── Sensitivity ── */
     .sens-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 11px 0; border-bottom: 1px solid var(--border);
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 16px;
+      padding: 16px 0; border-bottom: 1px solid var(--border);
     }
     .sens-row:last-child { border-bottom: none; }
-    .sens-price { font-size: 13px; color: var(--text2); width: 90px; flex-shrink: 0; }
-    .sens-bar-wrap { flex: 1; }
+    .sens-price { font-size: 14px; color: var(--text); font-weight: 600; min-width: 0; }
+    .sens-bar-wrap { grid-row: 2; min-width: 0; background: var(--border); border-radius: var(--radius-pill); }
     .sens-bar {
       height: 10px; border-radius: var(--radius-pill);
       background: var(--blue); transition: width 0.3s;
@@ -336,29 +335,35 @@
     .sens-bar.rank2 { background: var(--blue-light); }
     .sens-bar.rank3 { background: var(--orange); }
     .sens-bar.rankX { background: var(--red); }
-    .sens-score { font-size: 12px; font-weight: 600; width: 76px; text-align: right; flex-shrink: 0; }
-    .sens-rank { font-size: 12px; width: 44px; text-align: right; flex-shrink: 0; color: var(--text2); }
+    .sens-score { grid-row: 2; font-size: 12px; font-weight: 600; text-align: right; line-height: 1.7; }
+    .sens-rank { grid-row: 1; grid-column: 2; font-size: 12px; text-align: right; color: var(--text2); }
 
     /* ── Scenario ── */
     .scenario-card {
       background: var(--card); border-radius: var(--radius-lg);
       border: 1px solid var(--border); border-left: 4px solid var(--border-strong);
-      padding: 16px; margin-bottom: 12px;
+      padding: 20px; margin-bottom: 20px;
       box-shadow: var(--shadow-sm);
     }
     .scenario-card.s-first { background: var(--green-soft); border-color: #bbf7d0; border-left-color: var(--green); }
-    .sc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .sc-name { font-size: 15px; font-weight: 700; }
+    .sc-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 16px; margin-bottom: 20px; }
+    .sc-head > * { min-width: 0; }
+    .sc-name { font-size: 15px; font-weight: 700; line-height: 1.8; overflow-wrap: anywhere; }
     .sc-rank { font-size: 20px; font-weight: 850; color: var(--text2); }
     .sc-rank.first { color: var(--green); }
     .sc-rank.second { color: var(--blue); }
-    .scenario-sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+    .scenario-sub { font-size: 12px; color: var(--text3); margin-top: 8px; line-height: 1.7; overflow-wrap: anywhere; }
     .scenario-total { font-size: 22px; font-weight: 850; color: var(--text); }
     .align-right { text-align: right; }
-    .sc-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-    .sc-detail-item { min-width: 0; text-align: center; }
-    .sc-detail-item .dl { font-size: 11px; color: var(--text3); }
-    .sc-detail-item .dv { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+    .sc-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .sc-detail-item { min-width: 0; text-align: left; line-height: 1.7; }
+    .sc-detail-item .dl { font-size: 12px; color: var(--text3); margin-bottom: 6px; }
+    .sc-detail-item .dv { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .sc-detail-wide, .sc-actions { grid-column: 1 / -1; }
+    .sc-actions { display: flex; justify-content: flex-end; padding-top: 4px; }
+    #opt-result-box > .card .scenario-card { padding: 16px; box-shadow: none; }
+    #opt-result-box > .card .scenario-card:last-child { margin-bottom: 0; }
+    #opt-result-box .sc-detail-item:first-child { grid-column: 1 / -1; }
 
     /* ── Preset chips ── */
     .preset-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -424,9 +429,6 @@
       .header-btn { padding-left: 10px; padding-right: 10px; font-size: 12px; }
       .page { padding-left: 10px; padding-right: 10px; }
       .card, .bidder-card, .scenario-card, .rank-card { padding: 14px; }
-      .sens-price { width: 70px; }
-      .sens-score { width: 68px; }
-      .sens-rank { width: 36px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -757,12 +759,13 @@ function renderBidders() {
     div.className = 'bidder-card' + (b.isMe ? ' me' : '');
     div.innerHTML = `
       <div class="bidder-head">
-        <div class="bidder-name-wrap">
-          <span class="badge ${b.isMe?'badge-me':'badge-comp'}">${b.isMe?'目标':'样本'}</span>
-          <input class="bidder-name-input" type="text" value="${escapeHtml(b.name)}"
-            onchange="S.bidders[${idx}].name=this.value">
-        </div>
+        <span class="badge ${b.isMe?'badge-me':'badge-comp'}">${b.isMe?'目标样本':'其他样本'}</span>
         ${b.isMe ? '' : `<button class="btn-danger-sm" onclick="removeBidder(${idx})">删除</button>`}
+      </div>
+      <div class="field">
+        <label for="m-bidder-name-${idx}">样本名称</label>
+        <input id="m-bidder-name-${idx}" class="bidder-name-input" type="text" value="${escapeHtml(b.name)}"
+          onchange="S.bidders[${idx}].name=this.value">
       </div>
       <div class="field">
         <label>报价（元）${b.isMe?'<span class="target-label"> 目标</span>':''}</label>
@@ -873,7 +876,7 @@ function renderResult() {
       <div class="my-summary-sub">综合得分 ${me.total.toFixed(4)} 分 · 有效${bidValidity.validCount}/已建立${bidValidity.totalCount}</div>
       <div class="my-summary-scores">
         <div class="my-score-item"><div class="si-label">商务得分</div><div class="si-val">${me.businessScore}</div></div>
-        <div class="my-score-item"><div class="si-label">价格原始分${me.specialFullScore?' · 特殊满分':''}</div><div class="si-val">${fmtPriceScore(me.priceScore, config.priceStrategy)}</div><div class="ws-score-contribution">计入综合分<br>${RuleUI.contributionHtml(me.priceScore,config)}</div></div>
+        <div class="my-score-item my-price-score"><div class="si-label">价格原始分${me.specialFullScore?' · 特殊满分':''}</div><div class="si-val">${fmtPriceScore(me.priceScore, config.priceStrategy)}</div><div class="ws-score-contribution">计入综合分 ${RuleUI.contributionHtml(me.priceScore,config)}</div></div>
         <div class="my-score-item"><div class="si-label">技术得分</div><div class="si-val">${me.techScore}</div></div>
       </div>
     </div>`;
@@ -890,8 +893,7 @@ function renderResult() {
   WorkspaceUI.sortedResults(result).forEach(b => {
     const cls = b.rank===1?'first':b.rank===2?'second':'other';
     html += `<div ${b.isMe?'data-result-target':''} class="rank-card ${cls}">
-      <div class="rank-num">${b.rank}</div>
-      <div class="rank-name">${escapeHtml(b.name)}${b.isMe?'（目标）':''}</div>
+      <div class="rank-card-head"><div class="rank-name">${escapeHtml(b.name)}${b.isMe?'（目标）':''}</div><div class="rank-num">第${b.rank}名</div></div>
       <div class="rank-total">${b.total.toFixed(4)}</div>
       <div class="rank-meta">
         <div class="rank-meta-item">综合排名 <span>${b.tied?'并列':''}${b.rank}</span></div>
@@ -1031,7 +1033,7 @@ async function runOptimize() {
       <div class="sens-price">¥${fmtShort(candidate.price)}</div>
       <div class="sens-bar-wrap"><div class="sens-bar ${cls}" style="width:${pct}%"></div></div>
       <div class="sens-score">第一${candidate.topRate}%<br><span class="sens-score-sub">最低${fmtPriceScore(candidate.minScore,config.priceStrategy)}</span></div>
-      <div class="sens-rank">最差<br>第${candidate.worstRank}名</div>
+      <div class="sens-rank">最差第${candidate.worstRank}名</div>
     </div>`;
   }).join('');
 
@@ -1096,8 +1098,8 @@ function renderScenarios() {
       </div>
       <div class="sc-details">
         <div class="sc-detail-item"><div class="dl">报价</div><div class="dv value-compact">¥${fmtShort(s.price)}</div></div>
-        <div class="sc-detail-item"><div class="dl">商务/价格/技术原始分</div><div class="dv value-compact">${s.businessScore}/${fmtPriceScore(s.priceScore, s.strategy)}/${s.techScore}</div>${s.snapshot?`<div class="ws-score-contribution">价格计入综合分 ${RuleUI.contributionHtml(s.priceScore,s.snapshot.config)}</div>`:'<div class="ws-score-contribution">旧版未记录满分</div>'}</div>
-        <div class="sc-detail-item">
+        <div class="sc-detail-item sc-detail-wide"><div class="dl">商务 / 价格 / 技术原始分</div><div class="dv">${s.businessScore} / ${fmtPriceScore(s.priceScore, s.strategy)} / ${s.techScore}</div>${s.snapshot?`<div class="ws-score-contribution">价格计入综合分 ${RuleUI.contributionHtml(s.priceScore,s.snapshot.config)}</div>`:'<div class="ws-score-contribution">旧版未记录满分</div>'}</div>
+        <div class="sc-detail-item sc-actions">
           <button class="btn-danger-sm" onclick="removeScenario(${i})">删除</button>
         </div>
       </div>

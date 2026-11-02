@@ -158,12 +158,12 @@ const WorkspaceUI = (() => {
     const errors=Scoring.validateConfig(c,state.bidders);
     $('ws-rules').innerHTML=`<p>${esc(Scoring.describeRule(c))}</p>${c.priceStrategy==='outlierFilteredBenchmark'?`<label class="ws-participant"><input type="checkbox" id="ws-special-rule" ${c.strategyParams.outlierSpecialFullScore!==0&&c.strategyParams.outlierSpecialFullScore!==false?'checked':''}>启用技术最高且最低价满分</label>`:''}<p>综合分 = 商务原始分 ÷ ${esc(c.businessFull)} × ${esc(c.businessWeight)} + 价格原始分 ÷ ${esc(c.priceFull)} × ${esc(c.priceWeight)} + 技术原始分 ÷ ${esc(c.techFull)} × ${esc(c.techWeight)}</p>${errors.length?`<p class="ws-error">${errors.map(esc).join('；')}</p>`:'<p>当前规则与综合评分输入校验通过。</p>'}`;
     if($('ws-special-rule'))$('ws-special-rule').onchange=e=>{state.config.strategyParams.outlierSpecialFullScore=e.target.checked?1:0;invalidate();save();renderRules();};
-    $('ws-participants').innerHTML=state.bidders.map((b,i)=>`<label class="ws-participant"><input type="checkbox" data-index="${i}" ${b.enabled!==false?'checked':''}>${esc(b.name)}${b.isMe?'（目标）':''} · ${b.priceInputError?'格式错误':b.price>0?fmt(b.price):'未报价'}</label>`).join('');
+    $('ws-participants').innerHTML=state.bidders.map((b,i)=>`<label class="ws-participant"><input type="checkbox" data-index="${i}" ${b.enabled!==false?'checked':''}><span class="ws-participant-text">${esc(b.name)}${b.isMe?'（目标）':''}<small>${b.priceInputError?'格式错误':b.price>0?'¥ '+fmt(b.price):'未报价'}</small></span></label>`).join('');
     $('ws-participants').querySelectorAll('input').forEach(input=>input.onchange=()=>{state.bidders[+input.dataset.index].enabled=input.checked;invalidate();save();renderRules();});
   }
   function renderSnapshots() {
     if(!$('ws-snapshots'))return;
-    $('ws-snapshots').innerHTML=state.scenarios.map((s,i)=>`<div class="ws-row"><span>${esc(s.name)} · ${esc(s.timestamp||'历史方案')}</span><button data-index="${i}" ${s.snapshot?'':'disabled'}>${s.snapshot?'恢复为新项目':'旧版摘要，无法恢复'}</button></div>`).join('') || '<p>暂无方案</p>';
+    $('ws-snapshots').innerHTML=state.scenarios.map((s,i)=>`<div class="ws-row ws-snapshot"><span>${esc(s.name)} · ${esc(s.timestamp||'历史方案')}</span><button data-index="${i}" ${s.snapshot?'':'disabled'}>${s.snapshot?'恢复为新项目':'旧版摘要，无法恢复'}</button></div>`).join('') || '<p>暂无方案</p>';
     $('ws-snapshots').querySelectorAll('button[data-index]').forEach(b=>b.onclick=()=>transact(()=>{if(!save())return;const s=state.scenarios[+b.dataset.index];const data=Workspace.clone(s.snapshot);data.config.projectName=s.name+' 复算';apply(store.add(data));refresh();save(true);}));
   }
   function createSnapshot(config, bidders) { captureSearch();return Workspace.clone({config,bidders,scenarios:[],search:state.search||{}}); }
@@ -172,7 +172,7 @@ const WorkspaceUI = (() => {
     const panel=document.createElement('section');panel.id='ws-search';panel.className='ws-panel';
     panel.innerHTML=`<div class="ws-title">搜索目标与情景</div><div class="ws-row"><label>选择目标<select id="ws-objective"><option value="topRate">价格第一情景占比优先</option><option value="minScore">最差情景得分优先</option><option value="avgScore">加权平均得分优先</option><option value="threshold">全部情景达标后报价最高</option></select></label><label>最低可接受报价<input id="ws-floor" type="number" min="0" placeholder="可选"></label><label><span id="ws-required-label">目标价格原始分</span><input id="ws-required" type="number" min="0" value="0"></label></div>
       <label>特殊满分条件<select id="ws-special"><option value="priceOnly">仅按报价公式，不采用技术分特殊条件</option><option value="technical">采用已填写技术分（需完整数据）</option></select></label>
-      <details><summary>表格管理情景（支持任意样本数量与权重）</summary><label class="ws-participant"><input type="checkbox" id="ws-use-scenarios">使用下方情景表，替代文本情景</label><button id="ws-add-scenario">从当前样本新增情景</button><p class="ws-note">报价使用分号分隔，每个技术分与报价一一对应。权重表示相对重视程度，不代表实际发生概率。</p><div id="ws-scenario-rows"></div></details>
+      <details><summary>表格管理情景（支持任意样本数量与权重）</summary><div class="ws-actions"><label class="ws-participant"><input type="checkbox" id="ws-use-scenarios">使用下方情景表，替代文本情景</label><button id="ws-add-scenario">从当前样本新增情景</button></div><p class="ws-note">报价使用分号分隔，每个技术分与报价一一对应。权重表示相对重视程度，不代表实际发生概率。</p><div id="ws-scenario-rows"></div></details>
       <div id="ws-search-status" role="status"></div><button id="ws-cancel" hidden>取消测算</button><div id="ws-ranges"></div>`;
     $(adapter.searchIds.scenarios).parentElement.after(panel);
     const values=state.search?.options||{};
@@ -268,14 +268,27 @@ const WorkspaceUI = (() => {
       <td>${b.rank}${b.tied?'（并列）':''}</td><td>${b.benchmark==null?'—':fmt(b.benchmark)}</td>
     </tr>`).join('');
     const c=data.config;
-    const body=`<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><title>测算报告</title>
-      <style>body{font:14px sans-serif;margin:32px;color:#172b4d}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:8px}th{background:#eef3f8}pre{white-space:pre-wrap}button{padding:8px}.ws-scale{background:#eef3f8;padding:12px;margin:12px 0;line-height:1.6}.ws-contribution-unit{white-space:nowrap}@media print{button{display:none}}</style>
+    const body=`<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>测算报告</title>
+      <style>
+        *{box-sizing:border-box}body{font:14px/1.8 sans-serif;max-width:1440px;margin:0 auto;padding:24px;color:#172b4d;overflow-wrap:anywhere}
+        h1{font-size:24px;line-height:1.5;margin:0 0 20px}p,details{margin:16px 0}summary{cursor:pointer;font-weight:600}
+        .report-table-wrap{max-width:100%;overflow:auto;border:1px solid #cbd5e1;border-radius:8px;margin:16px 0}
+        table{border-collapse:collapse;width:100%;min-width:1200px;table-layout:fixed}th,td{border:1px solid #dbe4ef;padding:12px;vertical-align:top;font-size:13px}th{background:#eef3f8;text-align:left}
+        pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:#f8fafc;padding:16px;border-radius:8px}
+        button{min-height:44px;padding:10px 16px;font:inherit;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#23496e;cursor:pointer}
+        .ws-scale,.ws-trace{background:#eef3f8;padding:16px 20px;margin:20px 0;border-radius:8px}.ws-scale p{margin:10px 0 0}.ws-contribution-unit{white-space:nowrap}
+        @media(max-width:600px){body{padding:16px}h1{font-size:20px}}
+        @media print{@page{size:A4 landscape;margin:12mm}body{max-width:none;padding:0;font-size:11px}button,.report-scroll-hint{display:none}.report-table-wrap{overflow:visible;border:0}table{min-width:0}th,td{font-size:10px;padding:6px}tr{break-inside:avoid}thead{display:table-header-group}}
+      </style>
       <h1>${esc(c.projectName||'报价测算')}</h1><p>生成时间：${esc(new Date().toLocaleString())}</p>
       <p>${esc(Scoring.describeRule(c))}</p>${RuleUI.scaleHtml(c)}
       <p>分值构成：商务${c.businessWeight} / 价格${c.priceWeight} / 技术${c.techWeight}；商务/技术录入满分：${c.businessFull} / ${c.techFull}；价格公式满分：${c.priceFull}。</p>
       <p>综合分 = 商务原始分 ÷ ${c.businessFull} × ${c.businessWeight} + 价格原始分 ÷ ${c.priceFull} × ${c.priceWeight} + 技术原始分 ÷ ${c.techFull} × ${c.techWeight}，各项不提前舍入，合计保留四位。价格计入综合分列显示四位。</p>
       <p>已建立${count.totalCount}个，有效${count.validCount}个。未参与：${count.invalidBidders.map(b=>esc(b.name)).join('、')||'无'}</p>${trace(result,c)}
-      <table><thead><tr><th>名称</th><th>评标价格</th><th>价格排名</th><th>价格原始分（满分${c.priceFull}）</th><th>价格计入综合分（分值${c.priceWeight}）</th><th>商务</th><th>技术</th><th>总分</th><th>综合排名</th><th>基准价</th></tr></thead><tbody>${details}</tbody></table>
+      <p class="report-scroll-hint">可在表格内左右滑动查看全部明细；打印时使用横向页面。</p>
+      <div class="report-table-wrap" tabindex="0" role="region" aria-label="测算报告明细表，可横向滚动"><table>
+      <colgroup><col style="width:20%"><col style="width:12%"><col style="width:5%"><col style="width:10%"><col style="width:12%"><col style="width:6%"><col style="width:6%"><col style="width:8%"><col style="width:6%"><col style="width:15%"></colgroup>
+      <thead><tr><th>名称</th><th>评标价格</th><th>价格排名</th><th>价格原始分<br>（满分${c.priceFull}）</th><th>价格计入综合分<br>（分值${c.priceWeight}）</th><th>商务</th><th>技术</th><th>总分</th><th>综合排名</th><th>基准价</th></tr></thead><tbody>${details}</tbody></table></div>
       <p>同分采用并列排名。规则及数据取自本次导出的项目状态。</p><details><summary>完整复核数据</summary><pre>${esc(Workspace.exportProject(data))}</pre></details>
       <button onclick="window.print()">打印 / 保存PDF</button></html>`;
     download((c.projectName||'测算')+'-报告.html',body,'text/html');
