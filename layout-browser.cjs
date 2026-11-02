@@ -1,7 +1,7 @@
 // Responsive layout acceptance uses isolated storage and synthetic long names.
 module.exports = async function({browser,base,checks,errors,dir}) {
   const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-  const context=await browser.newContext({viewport:{width:1365,height:1000},acceptDownloads:true});
+  const context=await browser.newContext({viewport:{width:1365,height:1000},acceptDownloads:true,locale:'en-US'});
   const page=await context.newPage();
   page.on('pageerror',e=>errors.push(e.message));
   page.on('dialog',d=>d.accept());
@@ -62,6 +62,14 @@ module.exports = async function({browser,base,checks,errors,dir}) {
     await page.locator('#scenario-my-price').fill('1250000');
     await page.locator('#scenario-my-biz').fill('8');await page.locator('#scenario-my-tech').fill('50');
     await page.locator('#btn-save-scenario').click();
+    // Historical timestamps keep their original locale when a project is reopened.
+    await page.evaluate(()=>{
+      const key='bid-scorer-workspace-v2',db=JSON.parse(localStorage.getItem(key));
+      const current=db.projects.find(p=>p.id===db.activeId).data;
+      current.scenarios.push({...current.scenarios[0],name:'中文时间格式的历史方案',timestamp:'2026/11/02 23:59:59'});
+      localStorage.setItem(key,JSON.stringify(db));
+    });
+    await page.reload();
     for(const width of [1365,1024,768,390]) {
       await page.setViewportSize({width,height:1000});
       await page.locator('[data-tab=tab-config]').click();
