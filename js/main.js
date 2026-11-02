@@ -407,15 +407,9 @@ function calcPredictResult() {
   WorkspaceUI.fresh('predict-result-box');
 
   const benchmark = ranked.find(b => b.benchmark)?.benchmark;
-  const benchmarkHtml = benchmark
-    ? `<p style="font-size:12px;color:#666;margin-bottom:8px;">
-        评分基准价：¥${fmtBenchmark(benchmark, strategy)}　|　价格方法：${Scoring.strategyNames[strategy]}
-       </p>`
-    : `<p style="font-size:12px;color:#666;margin-bottom:8px;">价格策略：${Scoring.strategyNames[strategy]}</p>`;
-
   State.predictResult = {
     rows: ranked,
-    benchmarkHtml,
+    benchmark,
     strategy,
     priceFull: config.priceFull,
     config: Workspace.clone(config),
@@ -450,8 +444,8 @@ function renderPredictResultTable() {
     <th>报价样本</th>
     <th aria-sort="${ariaSort('price')}"><button type="button" class="table-sort-btn${activeClass('price')}" onclick="sortPredictResult('price')" aria-label="按假设报价排序">假设报价（元） <span>${sortIcon('price')}</span></button></th>
     <th>与基准价偏差</th>
-    <th>价格原始分（公式满分${snapshot.priceFull}）</th>
-    <th>价格计入综合分（分值${snapshot.config.priceWeight}）</th>
+    <th>价格原始分<small>公式满分 ${snapshot.priceFull}</small></th>
+    <th>计入综合分<small>价格分值 ${snapshot.config.priceWeight}</small></th>
   </tr>`;
 
   const tbodyHtml = rows.map(b => `
@@ -466,14 +460,27 @@ function renderPredictResultTable() {
 
   gi('predict-result-box').innerHTML = `
     <div class="predict-result-head">
-      <div>${snapshot.benchmarkHtml}</div>
-      <div class="predict-sort-status">当前排序：${sortLabel}；点击表头可切换</div>
+      <div class="predict-benchmark-block">
+        <span class="predict-meta-label">${snapshot.benchmark?'评标基准价':'价格评分结果'}</span>
+        <strong class="predict-benchmark-value">${snapshot.benchmark?'¥ '+fmtBenchmark(snapshot.benchmark,snapshot.strategy):`${snapshot.rows.length} 个有效报价`}</strong>
+      </div>
+      <div class="predict-method-block">
+        <span class="predict-meta-label">评分方法</span>
+        <strong>${escapeHtml(Scoring.strategyNames[snapshot.strategy])}</strong>
+      </div>
     </div>
-    ${RuleUI.scaleHtml(snapshot.config)}
-    ${WorkspaceUI.trace(snapshot.rows,snapshot.config)}
-    <p class="note">参与价格排名${snapshot.rows.length}个；空报价、禁用或错误报价不进入排名。</p>
-    <div class="table-wrap">
-      <table>
+    <div class="predict-rule-layout${snapshot.benchmark?'':' predict-rule-single'}">
+      ${RuleUI.scaleHtml(snapshot.config)}
+      ${WorkspaceUI.trace(snapshot.rows,snapshot.config)}
+    </div>
+    <div class="predict-table-toolbar">
+      <p class="predict-participants"><strong>${snapshot.rows.length} 个样本参与排名</strong><span>仅纳入有效参与报价</span></p>
+      <p class="predict-sort-status">当前排序：${sortLabel}<span>点击表头切换</span></p>
+    </div>
+    <p class="predict-scroll-hint">左右滑动表格，查看完整评分明细</p>
+    <div class="table-wrap predict-table-wrap" tabindex="0" role="region" aria-label="价格评分明细，可横向滚动">
+      <table class="predict-score-table" aria-label="价格得分与排名">
+        <colgroup><col class="predict-col-rank"><col class="predict-col-name"><col class="predict-col-price"><col class="predict-col-deviation"><col class="predict-col-score"><col class="predict-col-contribution"></colgroup>
         <thead>${theadHtml}</thead>
         <tbody>${tbodyHtml}</tbody>
       </table>
