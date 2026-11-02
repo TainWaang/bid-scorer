@@ -27,12 +27,6 @@ body {
   letter-spacing: 1px;
 }
 
-.app-header p {
-  font-size: 13px;
-  opacity: 0.8;
-  margin-top: 6px;
-}
-
 .app-header a {
   flex-shrink: 0;
   color: #fff;
@@ -741,7 +735,6 @@ tr.rank-1 td:first-child::after {
 @media (max-width: 800px) {
   .app-header { padding: 20px; gap: 16px; }
   .app-header h1 { font-size: 20px; }
-  .app-header p { font-size: 12px; }
   .container { padding: 16px; }
   .tab-panel { padding: 20px; }
   .card { padding: 20px; }
@@ -749,7 +742,7 @@ tr.rank-1 td:first-child::after {
 }
 
 @media (max-width: 600px) {
-  .app-header { align-items: flex-start; padding: 20px 16px; }
+  .app-header { padding: 20px 16px; }
   .app-header h1 { font-size: 18px; letter-spacing: 0; }
   .app-header a { padding: 6px 10px; font-size: 12px; }
   .container { padding: 12px; }
