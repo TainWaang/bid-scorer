@@ -116,6 +116,11 @@ const Scoring = (() => {
         }
       }
       if (['fixedBenchmark', 'intervalScore'].includes(strategy)) number('benchmark', 0, '固定基准价', Number.MIN_VALUE);
+      if (strategy === 'qualifiedMeanBenchmark') {
+        number('meanBenchmarkFactor', 0.9, '基准价系数', Number.MIN_VALUE);
+        number('meanHighDeduct', 0.5, '高价扣分');
+        number('meanLowDeduct', 0.25, '低价扣分');
+      }
       if (['fixedBenchmark', 'trimmedAverage', 'compositePrice'].includes(strategy)) {
         number('deductHigh', 0.5, '高价扣分'); number('deductLow', 0.3, '低价扣分');
       }
@@ -189,6 +194,27 @@ const Scoring = (() => {
    * 价格评分策略
    */
   const PriceStrategies = {
+
+    /** 复核后的合格评标价均值乘系数；高、低于基准价均扣分。 */
+    qualifiedMeanBenchmark(bids, fullScore, params = {}) {
+      const errors = validateStrategyConfig('qualifiedMeanBenchmark', fullScore, params);
+      if (errors.length) throw new Error(errors.join('；'));
+      const { normalizedBidders, validBidders } = summarizeBidValidity(bids);
+      if (!validBidders.length) return normalizedBidders.map(b => ({...b, priceScore:0, benchmark:0, validBidCount:0, includedBidCount:0}));
+      const meanEvaluatedPrice = validBidders.reduce((sum, b) => sum + b.price, 0) / validBidders.length;
+      const benchmark = meanEvaluatedPrice * Number(params.meanBenchmarkFactor ?? 0.9);
+      if (!Number.isFinite(benchmark) || benchmark <= 0) throw new Error('评标基准价无效，请检查评标价格和系数');
+      const highDeduct = Number(params.meanHighDeduct ?? 0.5);
+      const lowDeduct = Number(params.meanLowDeduct ?? 0.25);
+      return normalizedBidders.map(b => {
+        const metadata = {benchmark, meanEvaluatedPrice, validBidCount:validBidders.length, includedBidCount:validBidders.length};
+        if (b.price <= 0 || b.enabled === false) return {...b, ...metadata, priceScore:0, deviation:null};
+        const deviation = (b.price - benchmark) / benchmark * 100;
+        if (!Number.isFinite(deviation) || !Number.isFinite(round(deviation, 2))) throw new Error('评标价格偏差率无效，请检查评标价格和系数');
+        const deduction = Math.abs(deviation) * (deviation > 0 ? highDeduct : lowDeduct);
+        return {...b, ...metadata, priceScore:round(Math.max(0, Number(fullScore) - deduction), 2), deviation:round(deviation, 2)};
+      });
+    },
 
     /** Arithmetic mean of reviewed eligible prices, followed by configurable K/score interpolation. */
     piecewiseAverage(bids, fullScore, params = {}) {
@@ -539,7 +565,7 @@ const Scoring = (() => {
   function validateConfig(config, bidders = [], priceOnly = false) {
     const errors = validateStrategyConfig(config.priceStrategy, config.priceFull ?? 100, config.strategyParams || {});
     for (const b of bidders) if (b.enabled !== false && b.priceInputError) errors.push(`“${b.name || '样本'}”报价格式错误`);
-    if (config.priceStrategy === 'piecewiseAverage') {
+    if (['piecewiseAverage', 'qualifiedMeanBenchmark'].includes(config.priceStrategy)) {
       for (const b of bidders) {
         if (b.enabled !== false && !b.priceInputError && normalizePriceInput(b.price) <= 0) errors.push(`“${b.name || '样本'}”尚无有效评标价，请补齐或停用该样本后计算均值`);
       }
@@ -903,7 +929,7 @@ const Scoring = (() => {
 
   function describeRule(config) {
     const p = config.strategyParams || {}, full = config.priceFull ?? 100;
-    const names = {lowestPrice:'最低价比例法',averagePrice:'平均价法',piecewiseAverage:'均价基准＋节点分段插值',outlierFilteredBenchmark:'高价阈值剔除法',compositePrice:'复合基准价法',fixedBenchmark:'固定基准价法',trimmedAverage:'去高去低平均价法',tieredTrimmedBenchmark:'分档去高去低法',intervalScore:'区间得分法'};
+    const names = {lowestPrice:'最低价比例法',averagePrice:'平均价法',qualifiedMeanBenchmark:'合格均价×系数双向扣分法',piecewiseAverage:'均价基准＋节点分段插值',outlierFilteredBenchmark:'高价阈值剔除法',compositePrice:'复合基准价法',fixedBenchmark:'固定基准价法',trimmedAverage:'去高去低平均价法',tieredTrimmedBenchmark:'分档去高去低法',intervalScore:'区间得分法'};
     const s = config.priceStrategy;
     if (s === 'piecewiseAverage') {
       let nodes;
@@ -915,6 +941,7 @@ const Scoring = (() => {
     let formula = '';
     if(s==='lowestPrice')formula=`价格分 = ${full} × 最低有效报价 ÷ 本人报价`;
     if(s==='averagePrice')formula=`基准价为有效报价均值；基础分${p.avgBaseScore??80}；高于每1%扣${p.avgHighDeduct??1}，低于每1%加${p.avgLowAdd??1}；范围${p.avgMinScore??0}～${p.avgMaxScore??full}分`;
+    if(s==='qualifiedMeanBenchmark')formula=`合格投标人复核后的评标价格全部纳入，基准价A=算术平均值×${p.meanBenchmarkFactor??0.9}；偏差率K=(评标价格−A)÷A×100%；基准价得${full}分，高于每1%扣${p.meanHighDeduct??0.5}分、低于每1%扣${p.meanLowDeduct??0.25}分，最低0分；基准价和偏差率计算不提前舍入（显示值可能已舍入）`;
     if(s==='outlierFilteredBenchmark')formula=`初始均值×${p.outlierCutoffMultiple??1.5}及以上报价不纳入均价；其余均价×${p.outlierBenchmarkFactor??0.95}为基准价；偏差率先保留${p.outlierDeviationDecimals??2}位；高于每1%扣${p.outlierHighDeduct??0.8}，低于每1%扣${p.outlierLowDeduct??0.3}；范围${p.outlierMinScore??0}～${full}分；技术最高且报价最低特殊满分${p.outlierSpecialFullScore===0||p.outlierSpecialFullScore===false?'关闭':'启用'}`;
     if(s==='tieredTrimmedBenchmark')formula=`有效数大于${p.tierHighThreshold??10}两端各去${p.tierHighTrim??2}个；否则大于${p.tierMidThreshold??5}各去${p.tierMidTrim??1}个；其余全部纳入。均价×${p.benchmarkFactor??0.95}，基准价保留${p.benchmarkDecimals??6}位；基础分${p.tierBaseScore??35}，高于每1%扣${p.tierHighDeduct??0.5}、低于每1%加${p.tierLowAdd??0.5}；范围${p.tierMinScore??30}～${p.tierMaxScore??40}分`;
     if(s==='fixedBenchmark')formula=`基准价${p.benchmark??0}；高于每1%扣${p.deductHigh??0.5}、低于每1%扣${p.deductLow??0.3}`;
@@ -946,6 +973,7 @@ const Scoring = (() => {
     strategyNames: {
       lowestPrice:     '最低价法',
       averagePrice:    '平均价法',
+      qualifiedMeanBenchmark: '合格均价×系数双向扣分法',
       piecewiseAverage: '均价基准＋节点分段插值',
       outlierFilteredBenchmark: '高价阈值剔除×系数平均价法',
       compositePrice:  '复合基准价法',

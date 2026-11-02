@@ -23,6 +23,9 @@ const State = {
       avgHighDeduct: 1,
       avgMaxScore: 100,
       avgMinScore: 0,
+      meanBenchmarkFactor: 0.9,
+      meanHighDeduct: 0.5,
+      meanLowDeduct: 0.25,
       piecewiseNodes: Scoring.DEFAULT_PIECEWISE_NODES,
       piecewiseLeftScore: 80,
       piecewiseRightScore: 60,
@@ -183,7 +186,10 @@ function bindConfigEvents() {
     const previousComponentFullScore = getComponentFullScore(previousStrategy);
     State.config.priceStrategy = gi('cfg-strategy').value;
     const nextComponentFullScore = getComponentFullScore(State.config.priceStrategy);
-    if (nextComponentFullScore != null) {
+    if (State.config.priceStrategy === 'qualifiedMeanBenchmark') {
+      State.config.priceFull = 100;
+      v('cfg-price-full', 100);
+    } else if (nextComponentFullScore != null) {
       State.config.priceFull = nextComponentFullScore;
       v('cfg-price-full', State.config.priceFull);
     } else if (previousComponentFullScore != null && State.config.priceFull === previousComponentFullScore) {
@@ -259,6 +265,18 @@ function updateStrategyParams() {
       </div>
     </div>
     <p class="note">基准价 = 所有有效报价的算术平均值；默认适配当前项目：平均价80分，低于每1%加1分，高于每1%减1分，0~100分封顶。</p>`,
+    qualifiedMeanBenchmark: `<div class="form-row">
+      <div class="form-group"><label>基准价系数</label>
+        <input type="number" id="sp-meanBenchmarkFactor" value="${p.meanBenchmarkFactor ?? 0.9}" step="0.01" min="0">
+      </div>
+      <div class="form-group"><label>高于基准价每1%扣（分）</label>
+        <input type="number" id="sp-meanHighDeduct" value="${p.meanHighDeduct ?? 0.5}" step="0.01" min="0">
+      </div>
+      <div class="form-group"><label>低于基准价每1%扣（分）</label>
+        <input type="number" id="sp-meanLowDeduct" value="${p.meanLowDeduct ?? 0.25}" step="0.01" min="0">
+      </div>
+    </div>
+    <p class="note">录入人工复核后的最终评标价格，在“批量录入与参与状态”中停用不合格样本。已启用样本须全部填写有效评标价；算术平均值乘系数得到基准价，不去高去低。基准价和偏差率计算不提前舍入，页面显示值可能已舍入；价格得分保留两位小数，最低0分。</p>`,
     outlierFilteredBenchmark: `<div class="form-row">
       <div class="form-group"><label>高价剔除阈值（初始均值倍数）</label>
         <input type="number" id="sp-outlierCutoffMultiple" value="${p.outlierCutoffMultiple ?? 1.5}" step="0.01" min="1.01">
@@ -360,7 +378,7 @@ function updateStrategyParams() {
   container.innerHTML = `<div class="strategy-params">${templates[strategy] || ''}</div>`;
 
   // 绑定参数输入事件
-  const paramIds = ['piecewiseNodes','piecewiseLeftScore','piecewiseRightScore','piecewiseScoreDecimals','deductHigh','deductLow','avgBaseScore','avgLowAdd','avgHighDeduct','avgMaxScore','avgMinScore','outlierCutoffMultiple','outlierBenchmarkFactor','outlierHighDeduct','outlierLowDeduct','outlierMinScore','outlierDeviationDecimals','weightLow','weightAvg','benchmark','lowerPct','upperPct','deductOut','trimCount','tierHighThreshold','tierMidThreshold','tierHighTrim','tierMidTrim','benchmarkFactor','benchmarkDecimals','tierBaseScore','tierHighDeduct','tierLowAdd','tierMinScore','tierMaxScore'];
+  const paramIds = ['piecewiseNodes','piecewiseLeftScore','piecewiseRightScore','piecewiseScoreDecimals','deductHigh','deductLow','avgBaseScore','avgLowAdd','avgHighDeduct','avgMaxScore','avgMinScore','meanBenchmarkFactor','meanHighDeduct','meanLowDeduct','outlierCutoffMultiple','outlierBenchmarkFactor','outlierHighDeduct','outlierLowDeduct','outlierMinScore','outlierDeviationDecimals','weightLow','weightAvg','benchmark','lowerPct','upperPct','deductOut','trimCount','tierHighThreshold','tierMidThreshold','tierHighTrim','tierMidTrim','benchmarkFactor','benchmarkDecimals','tierBaseScore','tierHighDeduct','tierLowAdd','tierMinScore','tierMaxScore'];
   paramIds.forEach(pid => {
     const el = gi('sp-' + pid);
     if (el) {
@@ -530,6 +548,8 @@ function renderResult() {
   let countDetailText = '';
   if (config.priceStrategy === 'tieredTrimmedBenchmark' && result[0]) {
     countDetailText = ` 去最高、最低各${result[0].trimCount}个，基准价平均值纳入${result[0].includedBidCount}个报价。`;
+  } else if (config.priceStrategy === 'qualifiedMeanBenchmark' && result[0]) {
+    countDetailText = ` 基准价平均值纳入全部${result[0].includedBidCount}个有效评标价格。`;
   } else if (config.priceStrategy === 'outlierFilteredBenchmark' && result[0]) {
     const excludedNames = result[0].excludedHighBidderNames.map(name => escapeHtml(name)).join('、');
     const excludedNamesText = excludedNames ? `（${excludedNames}）` : '';
@@ -1001,6 +1021,7 @@ function fmt(num, maximumFractionDigits = 2, minimumFractionDigits = 0) {
   return Number(num).toLocaleString('zh-CN', { maximumFractionDigits, minimumFractionDigits });
 }
 function fmtBenchmark(num, strategy) {
+  if (strategy === 'qualifiedMeanBenchmark') return fmt(num, 6);
   return ['tieredTrimmedBenchmark','piecewiseAverage'].includes(strategy) ? fmt(num, 6, 6) : fmt(num);
 }
 function fmtPriceScore(score, strategy = State.config.priceStrategy) {
@@ -1008,6 +1029,7 @@ function fmtPriceScore(score, strategy = State.config.priceStrategy) {
 }
 function formatBenchmarkCountDetails(bidder, strategy) {
   if (bidder?.validBidCount == null) return '';
+  if (strategy === 'qualifiedMeanBenchmark') return `；有效${bidder.validBidCount}个，全部纳入平均`;
   if (strategy === 'piecewiseAverage') return `；参与${bidder.validBidCount}个，全部纳入算术均值`;
   if (strategy === 'tieredTrimmedBenchmark') {
     return `；有效${bidder.validBidCount}个，去两端各${bidder.trimCount}个，纳入平均${bidder.includedBidCount}个`;
@@ -1018,6 +1040,7 @@ function formatBenchmarkCountDetails(bidder, strategy) {
   return '';
 }
 function formatOptimizationInclusion(detail, strategy) {
+  if (strategy === 'qualifiedMeanBenchmark') return `全部纳入${detail.includedBidCount}个`;
   if (strategy === 'tieredTrimmedBenchmark') {
     return `最高/最低各${detail.trimCount}个；纳入${detail.includedBidCount}个`;
   }

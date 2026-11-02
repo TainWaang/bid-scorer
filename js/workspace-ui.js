@@ -192,7 +192,7 @@ const WorkspaceUI = (() => {
     $('ws-scenario-rows').querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{state.search.rows.splice(+b.dataset.remove,1);renderScenarios();invalidate();save();});
   }
   function validateCurrentScenario() {
-    if (state.config.priceStrategy !== 'piecewiseAverage') return;
+    if (!['piecewiseAverage', 'qualifiedMeanBenchmark'].includes(state.config.priceStrategy)) return;
     const others = state.bidders.filter(b=>b.id !== $(adapter.searchIds.target).value);
     const errors = Scoring.validateConfig(state.config, others, true);
     if (errors.length) throw new Error(errors.join('；'));
@@ -245,7 +245,7 @@ const WorkspaceUI = (() => {
   }
   function trace(rows) {
     const b=rows.find(b=>b.benchmark>0);if(!b)return '';
-    return `<details class="ws-trace"><summary>基准价 ${fmt(b.benchmark)} · 查看计算过程</summary><p>${esc(Scoring.describeRule(state.config))}</p>${b.preliminaryAverage!=null?`<p>初始均价：${fmt(b.preliminaryAverage)}；高价阈值：${fmt(b.exclusionThreshold)}；不纳入均价：${(b.excludedHighBidderNames||[]).map(esc).join('、')||'无'}</p>`:''}${b.validBidCount!=null?`<p>有效${b.validBidCount}个；${b.trimCount!=null?'两端各去'+b.trimCount+'个；':''}纳入均价${b.includedBidCount}个。</p>`:''}<p>偏差率 =（报价 − 基准价）÷ 基准价 × 100%；${state.config.priceStrategy==='piecewiseAverage'?'按相邻K节点线性插值，首末节点外使用固定分，再按选定舍入口径计分。':'按所选规则的高低侧斜率及舍入顺序计分，再应用得分上下限与特殊条件。'}</p></details>`;
+    return `<details class="ws-trace"><summary>基准价 ${fmt(b.benchmark)} · 查看计算过程</summary><p>${esc(Scoring.describeRule(state.config))}</p>${b.meanEvaluatedPrice!=null?`<p>合格评标价格的算术平均值：${fmt(b.meanEvaluatedPrice)}；基准价显示最多6位小数，计算不提前舍入。</p>`:''}${b.preliminaryAverage!=null?`<p>初始均价：${fmt(b.preliminaryAverage)}；高价阈值：${fmt(b.exclusionThreshold)}；不纳入均价：${(b.excludedHighBidderNames||[]).map(esc).join('、')||'无'}</p>`:''}${b.validBidCount!=null?`<p>有效${b.validBidCount}个；${b.trimCount!=null?'两端各去'+b.trimCount+'个；':''}纳入均价${b.includedBidCount}个。</p>`:''}<p>偏差率 =（报价 − 基准价）÷ 基准价 × 100%；${state.config.priceStrategy==='piecewiseAverage'?'按相邻K节点线性插值，首末节点外使用固定分，再按选定舍入口径计分。':'按所选规则的高低侧斜率及舍入顺序计分，再应用得分上下限与特殊条件。'}</p></details>`;
   }
   function resultTools(rows) {
     const view=state.resultView||{sort:'rank',query:''};

@@ -6,6 +6,66 @@ const config = {businessWeight:8,priceWeight:46,techWeight:46,businessFull:8,pri
 const data = () => ({config:{...config,projectName:'测试项目'},bidders:[{id:'my',name:'目标',isMe:true,price:100,businessScore:8,techScore:46},{id:'b',name:'样本',price:110,businessScore:7,techScore:40}],scenarios:[]});
 const memory = () => {const map = new Map();return {getItem:key=>map.get(key)??null,setItem:(key,value)=>map.set(key,value)};};
 
+test('reviewed prices use all qualified bids and deduct on both sides of the 90% benchmark',()=>{
+  const c={...config,priceFull:100,priceStrategy:'qualifiedMeanBenchmark',strategyParams:{meanBenchmarkFactor:.9,meanHighDeduct:.5,meanLowDeduct:.25}};
+  const bids=[81,90,99,130].map((price,i)=>({id:String(i),name:`合格${i}`,price,businessScore:0,techScore:i===0?46:40}));
+  bids.push({id:'excluded',name:'不合格',price:99999,enabled:false},{id:'blank',price:0,enabled:false});
+  const result=S.evaluate(bids,c);
+  assert.equal(result.length,4);
+  assert.ok(result.every(b=>b.benchmark===90&&b.validBidCount===4&&b.includedBidCount===4));
+  assert.deepEqual(Object.fromEntries(result.map(b=>[b.price,b.priceScore])),{'81':97.5,'90':100,'99':95,'130':77.78});
+  assert.deepEqual(S.evaluatePrice([{price:100,enabled:false},{price:0,enabled:false}],c),[]);
+  for(const count of [1,5,6,10,11,25]) {
+    const inputs=Array.from({length:count},(_,i)=>({price:(i+1)*100}));
+    const rows=S.evaluatePrice(inputs,c);
+    assert.equal(rows[0].benchmark,S.round((count+1)*50*.9,10));
+    assert.equal(rows[0].includedBidCount,count);
+  }
+});
+
+test('qualified mean blocks enabled missing prices until filled or disabled',()=>{
+  const c={...config,priceFull:100,priceStrategy:'qualifiedMeanBenchmark',strategyParams:{}};
+  const incomplete=[{name:'已复核',price:100},{name:'未复核',price:0}];
+  assert.throws(()=>S.evaluatePrice(incomplete,c),/未复核.*补齐或停用/);
+  assert.throws(()=>S.evaluate(incomplete.map(b=>({...b,businessScore:0,techScore:0})),c),/未复核.*补齐或停用/);
+  assert.throws(()=>S.evaluatePrice([{name:'错误报价',price:0,priceInputError:true}],c),/报价格式错误/);
+  assert.equal(S.evaluatePrice([incomplete[0],{...incomplete[1],enabled:false}],c)[0].benchmark,90);
+  assert.equal(S.evaluatePrice([incomplete[0],{...incomplete[1],price:120}],c)[0].benchmark,99);
+});
+
+test('qualified mean benchmark keeps full precision until the final score and clamps at zero',()=>{
+  const c={...config,priceFull:100,priceStrategy:'qualifiedMeanBenchmark',strategyParams:{}};
+  assert.equal(S.evaluatePrice([{price:100}],c)[0].priceScore,94.44);
+  const bids=[...Array.from({length:11},()=>({price:1})),{price:1000000}];
+  const result=S.evaluatePrice(bids,c);
+  assert.equal(result.length,12);
+  assert.equal(result.find(b=>b.price===1000000).priceScore,0);
+  assert.equal(result[0].includedBidCount,12);
+});
+
+test('qualified mean strategy rejects non-finite benchmark or deviation and runs scenario optimization',()=>{
+  const c={...config,priceFull:100,priceStrategy:'qualifiedMeanBenchmark',strategyParams:{}};
+  assert.throws(()=>S.evaluatePrice([{price:Number.MAX_VALUE},{price:Number.MAX_VALUE}],c),/评标基准价无效/);
+  assert.throws(()=>S.evaluatePrice([{price:1}],{...c,strategyParams:{meanBenchmarkFactor:1e-320,meanHighDeduct:0}}),/偏差率无效/);
+  const optimized=S.optimizePriceAcrossScenarios('my',[[90,99,130]],c,{minPrice:81,maxPrice:81,step:1});
+  assert.equal(optimized.best.details[0].benchmark,90);
+  assert.equal(optimized.best.details[0].priceScore,97.5);
+  assert.equal(optimized.best.details[0].includedBidCount,4);
+});
+
+test('qualified mean parameters validate individually and survive project export',()=>{
+  const c={...config,priceFull:100,priceStrategy:'qualifiedMeanBenchmark',strategyParams:{meanBenchmarkFactor:1,meanHighDeduct:.5,meanLowDeduct:.25}};
+  assert.deepEqual(S.validateStrategyConfig(c.priceStrategy,c.priceFull,c.strategyParams),[]);
+  for(const bad of [{meanBenchmarkFactor:0},{meanBenchmarkFactor:-1},{meanBenchmarkFactor:Infinity},{meanBenchmarkFactor:NaN},{meanHighDeduct:-1},{meanHighDeduct:Infinity},{meanHighDeduct:NaN},{meanLowDeduct:-1},{meanLowDeduct:Infinity},{meanLowDeduct:NaN}]) {
+    assert.ok(S.validateStrategyConfig(c.priceStrategy,c.priceFull,{...c.strategyParams,...bad}).length);
+  }
+  assert.ok(S.validateStrategyConfig(c.priceStrategy,0,c.strategyParams).length);
+  assert.deepEqual(S.validateStrategyConfig(c.priceStrategy,c.priceFull,{...c.strategyParams,meanHighDeduct:0,meanLowDeduct:0}),[]);
+  assert.equal(S.evaluatePrice([{price:81},{price:90},{price:99},{price:130}],c)[0].priceScore,95.25);
+  const project={...data(),config:{...c,projectName:'复核'},bidders:data().bidders};
+  assert.deepEqual(W.importProject(W.exportProject(project)).config,{...c,projectName:'复核'});
+});
+
 test('contradictory average scales rejected at both calculation entry points',()=>{
   const c={...config,priceStrategy:'averagePrice',strategyParams:{avgBaseScore:80,avgMaxScore:100}};
   assert.throws(()=>S.evaluate(data().bidders,c),/最低分/);

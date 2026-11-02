@@ -14,7 +14,7 @@ const Workspace = (() => {
       if (data.config[key] != null && !Number.isFinite(Number(data.config[key]))) throw new Error('规则数值无效：'+key);
       if (data.config[key] != null) data.config[key] = Number(data.config[key]);
     }
-    if (!['lowestPrice','averagePrice','piecewiseAverage','outlierFilteredBenchmark','compositePrice','fixedBenchmark','trimmedAverage','tieredTrimmedBenchmark','intervalScore'].includes(data.config.priceStrategy)) throw new Error('价格策略无效');
+    if (!['lowestPrice','averagePrice','qualifiedMeanBenchmark','piecewiseAverage','outlierFilteredBenchmark','compositePrice','fixedBenchmark','trimmedAverage','tieredTrimmedBenchmark','intervalScore'].includes(data.config.priceStrategy)) throw new Error('价格策略无效');
     data.config.strategyParams ||= {};
     for (const [key,v] of Object.entries(data.config.strategyParams)) {
       if (key === 'piecewiseNodes') {
