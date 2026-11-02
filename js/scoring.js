@@ -4,7 +4,8 @@
  */
 
 const Scoring = (() => {
-  const DEFAULT_PIECEWISE_NODES = '-11 80\n-10 90\n-9 93\n-8 95\n-7 97\n-6 99\n-5 100\n-3 100\n-2 95\n-1 90\n0 85\n1 80\n2 75\n3 60';
+  const Rules = typeof module!=='undefined' ? require('./rules') : ScoringRules;
+  const DEFAULT_PIECEWISE_NODES = Rules.DEFAULT_PIECEWISE_NODES;
 
   function parsePiecewiseNodes(text = DEFAULT_PIECEWISE_NODES) {
     if (typeof text !== 'string' || text.length > 12000) throw new Error('插值节点必须为不超过12000字的文本');
@@ -162,7 +163,7 @@ const Scoring = (() => {
     const priceFull = Number(config.priceFull ?? 100);
     const techFull = Number(config.techFull ?? 100);
     if (!Number.isFinite(businessFull) || businessFull <= 0) errors.push('商务录入满分必须大于0');
-    if (!Number.isFinite(priceFull) || priceFull <= 0) errors.push('价格录入满分必须大于0');
+    if (!Number.isFinite(priceFull) || priceFull <= 0) errors.push('价格公式满分必须大于0');
     if (!Number.isFinite(techFull) || techFull <= 0) errors.push('技术录入满分必须大于0');
     if (errors.length > 0) return errors;
 
@@ -535,31 +536,46 @@ const Scoring = (() => {
    * 计算综合得分
    */
   function calcTotal(bidders, config) {
-    const { businessWeight, priceWeight, techWeight } = config;
+    const { businessWeight, techWeight } = config;
     const businessFull = Number(config.businessFull) > 0 ? Number(config.businessFull) : 100;
-    const priceFull = Number(config.priceFull) > 0 ? Number(config.priceFull) : 100;
     const techFull = Number(config.techFull) > 0 ? Number(config.techFull) : 100;
     return bidders.map(b => {
+      const businessContribution = b.businessScore * businessWeight / businessFull;
+      const priceContribution = getPriceContribution(b.priceScore, config);
+      const techContribution = b.techScore * techWeight / techFull;
       const total = round(
-        b.businessScore * businessWeight / businessFull +
-        b.priceScore    * priceWeight    / priceFull +
-        b.techScore     * techWeight     / techFull,
+        businessContribution + priceContribution + techContribution,
         4
       );
-      return { ...b, total };
+      if (!Number.isFinite(total)) throw new Error('综合分超出有效计算范围');
+      return { ...b, businessContribution, priceContribution, techContribution, total };
     });
+  }
+
+  function getPriceContribution(priceScore, config) {
+    const full = Number(config.priceFull ?? 100), weight = Number(config.priceWeight);
+    if (!Number.isFinite(full) || full <= 0 || !Number.isFinite(weight) || weight < 0 || weight > 100) return null;
+    return Number(priceScore) * weight / full;
+  }
+
+  // Ranking uses the strategy's calculated score, including its explicit rounding policy.
+  function assignRanks(rows, scoreKey, rankKey, tiedKey) {
+    const groups = new Map();
+    for (const row of rows) groups.set(row[scoreKey], (groups.get(row[scoreKey]) || 0) + 1);
+    const positions = new Map();
+    let position = 1;
+    for (const score of [...groups.keys()].sort((a,b)=>b-a)) {
+      positions.set(score, position);
+      position += groups.get(score);
+    }
+    return rows.map(row=>({...row,[rankKey]:positions.get(row[scoreKey]),[tiedKey]:groups.get(row[scoreKey])>1}));
   }
 
   /**
    * 排名
    */
   function rank(bidders) {
-    const sorted = [...bidders].sort((a, b) => b.total - a.total);
-    let position = 0;
-    return sorted.map((b, i) => {
-      if (i === 0 || b.total !== sorted[i - 1].total) position = i + 1;
-      return { ...b, rank: position, tied: sorted.filter(row => row.total === b.total).length > 1 };
-    });
+    return assignRanks([...bidders].sort((a,b)=>b.total-a.total), 'total', 'rank', 'tied');
   }
 
   function validateConfig(config, bidders = [], priceOnly = false) {
@@ -582,11 +598,25 @@ const Scoring = (() => {
     const errors = validateConfig(config, bidders, true);
     if (errors.length) throw new Error(errors.join('；'));
     const valid = summarizeBidValidity(bidders).validBidders;
-    const scored = PriceStrategies[config.priceStrategy](valid, config.priceFull ?? 100, config.strategyParams || {});
-    return scored.map(b => ({ ...b,
-      priceRank: 1 + scored.filter(row => row.priceScore > b.priceScore).length,
-      priceTied: scored.filter(row => row.priceScore === b.priceScore).length > 1,
-    }));
+    return scoreEligibleBids(valid, config);
+  }
+
+  // Shared by normal evaluation and the Worker; callers validate config and participation first.
+  function scoreEligibleBids(valid, config) {
+    const params=Object.fromEntries(Object.entries(config.strategyParams || {}).map(([key,value])=>
+      [key,key==='piecewiseNodes' || value==null?value:Number(value)]));
+    const scored = PriceStrategies[config.priceStrategy](valid, Number(config.priceFull ?? 100), params);
+    for (const bidder of scored) {
+      for (const key of ['priceScore','benchmark','deviation','meanEvaluatedPrice','preliminaryAverage','exclusionThreshold']) {
+        if (bidder[key] != null && !Number.isFinite(bidder[key])) throw new Error('评分结果超出有效计算范围，请检查报价和规则参数');
+      }
+      if (bidder.benchmark != null && bidder.benchmark <= 0) throw new Error('评标基准价无效，请检查报价和规则参数');
+    }
+    return assignRanks(scored, 'priceScore', 'priceRank', 'priceTied').map(b=>{
+      const priceContribution=getPriceContribution(b.priceScore,config);
+      if (priceContribution!=null && !Number.isFinite(priceContribution)) throw new Error('价格计入综合分的结果超出有效范围');
+      return {...b,priceContribution};
+    });
   }
 
   /**
@@ -703,9 +733,7 @@ const Scoring = (() => {
   function parsePriceScenarios(text, fallbackBidders = []) {
     const content = String(text || '').trim();
     if (!content) {
-      const bidders = fallbackBidders
-        .filter(bidder => Number(bidder.price) > 0)
-        .map(bidder => ({ name: bidder.name, price: Number(bidder.price) }));
+      const bidders = summarizeBidValidity(fallbackBidders).validBidders;
       if (bidders.length === 0) {
         throw new Error('请填写至少一个报价情景，或先填写其他报价样本');
       }
@@ -759,7 +787,7 @@ const Scoring = (() => {
       if (!Array.isArray(source) || source.length === 0) {
         throw new Error(`情景“${name}”至少需要一个其他报价样本`);
       }
-      const bidders = source.map((bidder, bidderIndex) => {
+      const bidders = source.filter(bidder=>typeof bidder==='number' || bidder?.enabled!==false).map((bidder, bidderIndex) => {
         const sourceBidder = typeof bidder === 'number'
           ? { name: `其他样本${bidderIndex + 1}`, price: bidder }
           : { ...bidder };
@@ -769,6 +797,7 @@ const Scoring = (() => {
         }
         return { ...sourceBidder, id: `s${scenarioIndex}-b${bidderIndex}`, price };
       });
+      if (!bidders.length) throw new Error(`情景“${name}”至少需要一个有效的其他参与样本`);
       const weight = Number(scenario.weight ?? 1);
       if (!Number.isFinite(weight) || weight <= 0) throw new Error(`情景“${name}”权重必须大于0`);
       return { name, bidders, weight };
@@ -783,15 +812,14 @@ const Scoring = (() => {
     if (estimatedCount > 200000) {
       throw new Error('搜索点超过200000个，请增大搜索步长');
     }
-    for (let price = minPrice; price <= maxPrice + 1e-9; price += step) {
-      const roundedPrice = round(Math.min(price, maxPrice), 6);
-      if (candidatePrices[candidatePrices.length - 1] !== roundedPrice) {
-        candidatePrices.push(roundedPrice);
-      }
+    // Index-based steps cannot stop advancing halfway through the range or round below a floor.
+    for (let i = 0; i < estimatedCount; i++) {
+      const price = minPrice + i * step;
+      if (price > maxPrice) break;
+      if (candidatePrices[candidatePrices.length - 1] !== price) candidatePrices.push(price);
     }
-    const roundedMax = round(maxPrice, 6);
-    if (candidatePrices[candidatePrices.length - 1] < roundedMax) {
-      candidatePrices.push(roundedMax);
+    if (candidatePrices[candidatePrices.length - 1] < maxPrice) {
+      candidatePrices.push(maxPrice);
     }
     const workUnits = candidatePrices.length * normalizedScenarios.reduce(
       (sum, scenario) => sum + scenario.bidders.length + 1,
@@ -803,7 +831,6 @@ const Scoring = (() => {
 
     const configErrors = validateConfig(config, [], true);
     if (configErrors.length) throw new Error(configErrors.join('；'));
-    const strategy = PriceStrategies[config.priceStrategy];
     const priceFull = config.priceFull ?? 100;
     const params = config.strategyParams || {};
     const candidates = [];
@@ -811,7 +838,10 @@ const Scoring = (() => {
     if (!['topRate', 'minScore', 'avgScore', 'threshold'].includes(objective)) throw new Error('搜索目标无效');
     const requiredScore = Number(searchRange.requiredScore ?? 0);
     if (!Number.isFinite(requiredScore) || requiredScore < 0 || requiredScore > priceFull) throw new Error('目标得分必须在0到价格满分之间');
-    const totalWeight = normalizedScenarios.reduce((sum, s) => sum + s.weight, 0);
+    const maximumWeight = normalizedScenarios.reduce((max,s)=>Math.max(max,s.weight),0);
+    const scaledWeights = normalizedScenarios.map(s=>s.weight/maximumWeight);
+    const scaledWeightSum = scaledWeights.reduce((sum,w)=>sum+w,0);
+    const weightShares = scaledWeights.map(w=>w/scaledWeightSum);
     const useTechnical = searchRange.specialMode === 'technical';
     if (useTechnical && (searchRange.targetTechScore == null || !Number.isFinite(Number(searchRange.targetTechScore)) || Number(searchRange.targetTechScore) < 0 || Number(searchRange.targetTechScore) > (config.techFull ?? 100) || normalizedScenarios.some(s => s.bidders.some(b => b.techScore == null || !Number.isFinite(Number(b.techScore)) || Number(b.techScore) < 0 || Number(b.techScore) > (config.techFull ?? 100))))) throw new Error('启用特殊满分条件时，请提供全部样本及目标的有效技术分');
     const searchParams = useTechnical ? params : { ...params, outlierSpecialFullScore: 0 };
@@ -822,15 +852,17 @@ const Scoring = (() => {
           { id: myBidderId, name: '目标方案', price, isMe: true, ...(useTechnical ? {techScore: Number(searchRange.targetTechScore)} : {}) },
           ...scenario.bidders.map(bidder => ({ ...bidder })),
         ];
-        const result = strategy(allBidders, priceFull, searchParams);
+        const result = scoreEligibleBids(allBidders, {...config, strategyParams:searchParams});
         const me = result.find(bidder => bidder.id === myBidderId);
-        const priceRank = 1 + result.filter(bidder => bidder.priceScore > me.priceScore + 1e-9).length;
+        const priceRank = me.priceRank;
         return {
           name: scenario.name,
           weight: scenario.weight,
           participantCount: result.filter(bidder => bidder.price > 0).length,
           priceScore: me.priceScore,
+          priceContribution: me.priceContribution,
           priceRank,
+          priceTied: me.priceTied,
           isTop: priceRank === 1,
           benchmark: me.benchmark ?? null,
           deviation: me.deviation ?? null,
@@ -846,16 +878,18 @@ const Scoring = (() => {
 
       const scores = details.map(detail => detail.priceScore);
       const ranks = details.map(detail => detail.priceRank);
-      candidates.push({
+      const candidate = {
         price,
-        topRate: round(details.filter(detail => detail.isTop).reduce((sum, d) => sum + d.weight, 0) / totalWeight * 100, 6),
+        topRate: round(details.reduce((sum,d,i)=>sum+(d.isTop?weightShares[i]:0),0)*100, 6),
         minScore: Math.min(...scores),
-        avgScore: round(details.reduce((sum, d) => sum + d.priceScore * d.weight, 0) / totalWeight, 6),
+        avgScore: round(details.reduce((sum,d,i)=>sum+d.priceScore*weightShares[i],0), 6),
         maxScore: Math.max(...scores),
         worstRank: Math.max(...ranks),
         avgRank: round(ranks.reduce((sum, rankValue) => sum + rankValue, 0) / ranks.length, 2),
         details,
-      });
+      };
+      if (['price','topRate','minScore','avgScore','maxScore','worstRank','avgRank'].some(key=>!Number.isFinite(candidate[key]))) throw new Error('搜索汇总结果超出有效计算范围');
+      candidates.push(candidate);
     }
 
     const compare = (left, right) =>
@@ -962,6 +996,7 @@ const Scoring = (() => {
     validateComponentScoreConfig,
     validateConfig,
     evaluatePrice,
+    getPriceContribution,
     describeRule,
     sortPriceResults,
     evaluate,
@@ -970,18 +1005,7 @@ const Scoring = (() => {
     optimizePriceAcrossScenarios,
     sensitivityAnalysis,
     round,
-    strategyNames: {
-      lowestPrice:     '最低价法',
-      averagePrice:    '平均价法',
-      qualifiedMeanBenchmark: '合格均价×系数双向扣分法',
-      piecewiseAverage: '均价基准＋节点分段插值',
-      outlierFilteredBenchmark: '高价阈值剔除×系数平均价法',
-      compositePrice:  '复合基准价法',
-      fixedBenchmark:  '固定基准价法',
-      trimmedAverage:  '去高去低平均价法',
-      tieredTrimmedBenchmark: '分档去高去低×系数法',
-      intervalScore:   '区间得分法',
-    },
+    strategyNames: Object.fromEntries(Object.entries(Rules.strategies).map(([key,rule])=>[key,rule.name])),
   };
 })();
 

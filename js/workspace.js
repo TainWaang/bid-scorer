@@ -1,21 +1,47 @@
 /* Shared, versioned browser storage. Legacy data is retained as a recovery source. */
 const Workspace = (() => {
+  const Rules = typeof module!=='undefined' ? require('./rules') : ScoringRules;
   const KEY = 'bid-scorer-workspace-v2';
   const LEGACY = 'bid-scorer-desktop-state-v1';
   const clone = value => JSON.parse(JSON.stringify(value));
   const id = () => 'p-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+  function validateSearch(search) {
+    if (search == null) return;
+    if (!isRecord(search)) throw new Error('搜索配置结构无效');
+    const scalar = value => ['string','boolean'].includes(typeof value) || (typeof value==='number' && Number.isFinite(value));
+    for (const key of ['target','scenarios','minPrice','maxPrice','step']) {
+      if (search[key] != null && !scalar(search[key])) throw new Error('搜索输入结构无效：'+key);
+    }
+    if (search.useTable != null && typeof search.useTable !== 'boolean') throw new Error('搜索情景开关无效');
+    if (search.options != null && (!isRecord(search.options) || Object.values(search.options).some(v=>!scalar(v)))) throw new Error('搜索目标配置结构无效');
+    if (search.rows == null) return;
+    if (!Array.isArray(search.rows) || search.rows.length>500) throw new Error('搜索情景须为不超过500项的列表');
+    for (const row of search.rows) {
+      if (!isRecord(row) || !Array.isArray(row.bidders) || row.bidders.length>1000) throw new Error('搜索情景样本结构无效');
+      for (const key of ['name','pricesText','techText']) if (row[key]!=null && typeof row[key]!=='string') throw new Error('搜索情景文本无效：'+key);
+      if (row.weight!=null && !scalar(row.weight)) throw new Error('搜索情景权重结构无效');
+      for (const bidder of row.bidders) {
+        if (!isRecord(bidder)) throw new Error('搜索情景样本结构无效');
+        for (const key of ['price','techScore']) if (bidder[key]!=null && (!scalar(bidder[key]) || !Number.isFinite(Number(bidder[key])))) throw new Error('搜索情景样本数值无效');
+        if (bidder.enabled!=null && typeof bidder.enabled!=='boolean') throw new Error('搜索情景参与状态无效');
+      }
+    }
+  }
 
   function validateSnapshot(value, depth = 0) {
     if (depth > 1) throw new Error('方案嵌套层级无效');
-    if (!value || typeof value !== 'object' || !value.config || !Array.isArray(value.bidders) || !Array.isArray(value.scenarios || [])) throw new Error('项目文件结构无效');
+    if (!isRecord(value) || !isRecord(value.config) || !Array.isArray(value.bidders) || !Array.isArray(value.scenarios || [])) throw new Error('项目文件结构无效');
     if (!value.bidders.length || value.bidders.length > 1000 || (value.scenarios || []).length > 500) throw new Error('项目样本或方案数量超限');
     const data = clone(value);
     for (const key of ['businessWeight','priceWeight','techWeight','businessFull','priceFull','techFull']) {
       if (data.config[key] != null && !Number.isFinite(Number(data.config[key]))) throw new Error('规则数值无效：'+key);
       if (data.config[key] != null) data.config[key] = Number(data.config[key]);
     }
-    if (!['lowestPrice','averagePrice','qualifiedMeanBenchmark','piecewiseAverage','outlierFilteredBenchmark','compositePrice','fixedBenchmark','trimmedAverage','tieredTrimmedBenchmark','intervalScore'].includes(data.config.priceStrategy)) throw new Error('价格策略无效');
+    if (!Object.hasOwn(Rules.strategies,data.config.priceStrategy)) throw new Error('价格策略无效');
     data.config.strategyParams ||= {};
+    if (!isRecord(data.config.strategyParams)) throw new Error('规则参数结构无效');
     for (const [key,v] of Object.entries(data.config.strategyParams)) {
       if (key === 'piecewiseNodes') {
         if (typeof v !== 'string' || v.length > 12000) throw new Error('插值节点文本无效或过长');
@@ -31,6 +57,8 @@ const Workspace = (() => {
       while (ids.has(b.id)) b.id += '-copy';
       ids.add(b.id);
       b.name = String(b.name || `样本${index + 1}`).slice(0, 200);
+      if (b.enabled!=null && typeof b.enabled!=='boolean') throw new Error('样本参与状态无效');
+      if (b.priceInput!=null && (typeof b.priceInput!=='string' || b.priceInput.length>200)) throw new Error('报价输入原文无效');
       for (const key of ['price', 'businessScore', 'techScore']) {
         if (b[key] == null || b[key] === '') b[key] = 0;
         if (!Number.isFinite(Number(b[key]))) throw new Error(`“${b.name}”的${key}不是有效数字`);
@@ -50,7 +78,8 @@ const Workspace = (() => {
       if (s.snapshot) clean.snapshot = validateSnapshot(s.snapshot, depth + 1);
       return clean;
     });
-    data.config.projectName = String(data.config.projectName || '未命名项目').slice(0, 200);
+    validateSearch(data.search);
+    data.config.projectName = String(data.config.projectName ?? '未命名项目').slice(0, 200);
     return data;
   }
 
@@ -61,7 +90,18 @@ const Workspace = (() => {
       const raw = storage.getItem(KEY);
       if (raw) {
         db = JSON.parse(raw);
-        if (db.version !== 2 || !Array.isArray(db.projects) || !db.projects.some(p => p.id === db.activeId)) throw new Error('保存数据无法读取，请先导出备份后处理');
+        if (db.version !== 2 || !Array.isArray(db.projects) || !db.projects.some(p => p.id === db.activeId) || !Number.isSafeInteger(db.revision) || db.revision<0) throw new Error('保存数据无法读取，请先导出备份后处理');
+        const projectIds = new Set();
+        for (const project of db.projects) {
+          if (!isRecord(project) || typeof project.id!=='string' || projectIds.has(project.id)) throw new Error('保存的项目列表结构无效');
+          projectIds.add(project.id);
+          project.data = validateSnapshot(project.data);
+        }
+        if (db.templates!=null && !Array.isArray(db.templates)) throw new Error('保存的规则模板结构无效');
+        for (const template of db.templates || []) {
+          if (!isRecord(template) || typeof template.id!=='string' || typeof template.name!=='string') throw new Error('保存的规则模板结构无效');
+          template.config = validateSnapshot({config:template.config,bidders:defaults.bidders,scenarios:[]}).config;
+        }
         revision = db.revision;
       } else {
         const legacy = storage.getItem(LEGACY);
@@ -83,6 +123,7 @@ const Workspace = (() => {
       revision = next.revision;
     }
     function save(data) {
+      validateSnapshot(data); // Preserve editable values, but never persist an unrenderable structure.
       const next = clone(db);
       const p = next.projects.find(p => p.id === next.activeId);
       p.data = clone(data);
@@ -107,6 +148,7 @@ const Workspace = (() => {
     }
     function list() { return db.projects.map(p => ({id:p.id, name:p.data.config.projectName || '未命名项目', active:p.id === db.activeId})); }
     function saveTemplate(name, config) {
+      validateSnapshot({config,bidders:defaults.bidders,scenarios:[]});
       const next = clone(db);
       next.templates ||= [];
       next.templates.push({id:id(),name:String(name).slice(0,200),config:clone(config)});
@@ -147,6 +189,6 @@ const Workspace = (() => {
       return b;
     }).filter(Boolean);
   }
-  return {KEY, clone, id, createStore, exportProject, importProject, validateSnapshot, parseTable};
+  return {KEY, clone, id, createStore, exportProject, importProject, validateSnapshot, validateSearch, parseTable};
 })();
 if (typeof module !== 'undefined') module.exports = Workspace;

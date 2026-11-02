@@ -38,7 +38,7 @@
     <input type="hidden" id="cfg-project">
 
     <div class="card">
-      <div class="card-title">综合分值构成与录入满分
+      <div class="card-title">综合分值构成与评分口径
         <span id="weight-sum" class="weight-sum err">分值合计：100</span>
       </div>
       <div class="form-row">
@@ -59,15 +59,16 @@
           <input type="number" id="cfg-business-full" value="100" min="0.01" step="0.5">
         </div>
         <div class="form-group">
-          <label>价格录入满分</label>
-          <input type="number" id="cfg-price-full" value="100" min="1" max="100" step="1">
+          <label for="cfg-price-full">价格公式满分</label>
+          <input type="number" id="cfg-price-full" value="100" min="0.01" step="any">
         </div>
         <div class="form-group">
           <label>技术录入满分</label>
           <input type="number" id="cfg-tech-full" value="100" min="0.01" step="0.5">
         </div>
       </div>
-      <p class="note">三项分值构成之和应为100。若直接录入分项原始得分，可将录入满分设为对应分值构成（例如8/46/46）；若录入百分制得分，则设为100。</p>
+      <p class="note">三项分值构成合计100。商务、技术录入满分按实际分数填写；价格公式满分按招标公式填写。例如价格占35分、公式从100分扣分时，价格分值填35，价格公式满分填100。</p>
+      <div id="price-scale-note" aria-live="polite"></div>
     </div>
 
     <div class="card">
@@ -75,18 +76,7 @@
       <div class="form-row">
         <div class="form-group" style="min-width:280px;">
           <label>评分方法</label>
-          <select id="cfg-strategy">
-            <option value="lowestPrice">最低价法（最低报价得满分）</option>
-            <option value="averagePrice" selected>平均价法（平均值为基准价）</option>
-            <option value="qualifiedMeanBenchmark">合格均价×系数双向扣分法</option>
-            <option value="piecewiseAverage">均价基准＋节点分段插值</option>
-            <option value="outlierFilteredBenchmark">高价阈值剔除×系数平均价法</option>
-            <option value="compositePrice">复合基准价法（最低价+平均价加权）</option>
-            <option value="fixedBenchmark">固定基准价法</option>
-            <option value="trimmedAverage">去高去低平均价法</option>
-            <option value="tieredTrimmedBenchmark">分档去高去低×系数法</option>
-            <option value="intervalScore">区间得分法</option>
-          </select>
+          <select id="cfg-strategy"></select>
         </div>
       </div>
       <div id="strategy-params-container"></div>
@@ -177,7 +167,7 @@
     <div class="card">
       <div class="card-title">即时报价模拟</div>
       <p class="note" style="margin-bottom:12px;">
-        输入独立假设的报价样本，按当前价格评分规则计算价格得分与排名。综合得分（含商务/技术）请到“③ 综合评分”查看。
+        输入假设报价，按当前规则计算价格得分与排名。这里与“③ 综合评分”共用报价数据；修改后会保存到当前项目。综合分含商务、技术得分。
       </p>
       <div class="table-wrap">
         <table>
@@ -309,7 +299,9 @@
 
 </div>
 
+<script src="js/rules.js"></script>
 <script src="js/scoring.js"></script>
+<script src="js/rule-ui.js"></script>
 <script src="js/workspace.js"></script>
 <script src="js/workspace-ui.js"></script>
 <script src="js/main.js"></script>

@@ -205,7 +205,7 @@ const checks=[];
     assert.match(await page.locator('#result-table-body tr.my-row').innerText(),/93\.5000/);
     assert.match(await page.locator('#result-summary').innerText(),/1,000,000\.000000/);
     await page.locator('[data-tab="tab-optimize"]').click();await page.locator('#btn-predict-calc').click();
-    assert.equal(await page.locator('#predict-result-box tr.my-row td').last().innerText(),'67.50');
+    assert.equal(await page.locator('#predict-result-box tr.my-row td').nth(4).innerText(),'67.50');
     await page.locator('#opt-min').fill('1025000');await page.locator('#opt-max').fill('1025000');await page.locator('#opt-step').fill('1');
     await page.locator('.predict-price-input').nth(1).fill('');
     await page.locator('#btn-search-optimal').click();
@@ -246,6 +246,7 @@ const checks=[];
     assert.equal(await page.locator('.my-summary .my-score-item').nth(1).locator('.si-val').innerText(),'67.50');
     assert.match(await page.locator('.my-summary-sub').innerText(),/93\.5000/);
     checks.push('piecewise mobile inputs, persistence and scoring');
+    await require('./design-browser.cjs')({browser,base,checks,errors,dir});
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({checks,pageErrors:errors.length},null,2));
   } finally {await context.close();await browser.close();server.close();}

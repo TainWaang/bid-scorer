@@ -9,3 +9,16 @@
 .ws-controls{grid-column:1/-1;display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:12px 0;padding:12px;background:#f1f5f9;border-radius:8px;color:#203957;font-size:13px}.ws-controls label{flex:1;min-width:120px}.ws-controls input,.ws-controls select{display:block;width:100%;padding:8px;background:#fff;border:1px solid #cbd5e1;border-radius:6px;font:inherit;box-sizing:border-box}.ws-controls button{padding:8px;cursor:pointer;border:1px solid #cbd5e1;border-radius:6px;background:white;color:#203957}.ws-controls p{width:100%;font-size:12px}.summary-grid>.ws-trace{grid-column:1/-1}
 .table-wrap{max-height:650px}.table-wrap thead th{position:sticky;top:0;z-index:1}.table-wrap td:nth-child(3){font-variant-numeric:tabular-nums}
 @media(max-width:600px){.ws-panel{padding:12px}.ws-actions>*{flex:1 1 40%}.ws-row{align-items:stretch}.ws-row>label{min-width:120px}.ws-panel button{min-height:40px}.ws-panel select{min-height:40px}}
+
+.ws-param-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px;align-items:start}
+.ws-param label{display:block;font-size:13px;color:#536779;margin-bottom:6px;line-height:1.5}
+.ws-param input,.ws-param select,.ws-param textarea{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #cbd5e1;border-radius:7px;font:inherit;background:#fff;color:#203957}
+.ws-param textarea{resize:vertical;line-height:1.5;font-variant-numeric:tabular-nums}.ws-param-wide{grid-column:1/-1}
+.ws-rule-hint{line-height:1.7;margin-top:14px}
+.ws-scale{padding:12px 14px;margin:12px 0;background:#eff6ff;border:1px solid #c9ddf5;border-radius:8px;color:#23496e;font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.ws-scale p{margin:6px 0 0}.ws-scale-check{background:#fff8e8;border-color:#e8c87a;color:#79520d}
+.ws-contribution-unit{font-size:12px;opacity:.8;white-space:nowrap}.ws-score-contribution{font-size:12px;line-height:1.5;margin-top:7px}
+.summary-card.summary-benchmark .value{font-size:18px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.summary-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:800px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.summary-grid{grid-template-columns:1fr}}

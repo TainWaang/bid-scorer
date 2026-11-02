@@ -3,16 +3,23 @@ const WorkspaceUI = (() => {
   let state, defaults, store, adapter, loadError, lastSaved, worker, rejectSearch;
   let preview = null, fingerprint;
   const calculationKey = () => JSON.stringify({config:state.config,bidders:state.bidders,search:state.search});
+  const inputKey = () => JSON.stringify({config:state.config,bidders:state.bidders});
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt = n => Number(n).toLocaleString('zh-CN', {maximumFractionDigits:6});
   function snapshot() { return Workspace.clone({config:state.config,bidders:state.bidders,scenarios:state.scenarios,search:state.search || {}}); }
   function apply(data) {
-    state.config = {...Workspace.clone(defaults.config), ...data.config, strategyParams:{...defaults.config.strategyParams,...data.config.strategyParams}};
+    state.config = ScoringRules.createConfig(data.config);
     state.bidders = Workspace.clone(data.bidders);
     state.scenarios = Workspace.clone(data.scenarios || []);
     state.search = Workspace.clone(data.search || {});
     state.predictResult = null;
+    state.resultView = {sort:'rank',query:''};
+    preview = null;
+    if ($('ws-paste')) $('ws-paste').value='';
+    if ($('ws-preview-result')) $('ws-preview-result').textContent='';
+    if ($('ws-append')) $('ws-append').disabled=true;
+    adapter?.resetDrafts?.();
   }
   function load(s) {
     state = s;
@@ -53,9 +60,8 @@ const WorkspaceUI = (() => {
     const a = document.createElement('a'); a.href=url; a.download=name.replace(/[\\/:*?"<>|]/g,'_'); a.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
-  function invalidate() {
-    cancelSearch();
-    for (const id of adapter?.resultIds || []) {
+  function markStale(...ids) {
+    for (const id of ids) {
       const node=$(id);
       if (!node || !node.textContent.trim()) continue;
       node.classList.add('ws-stale');
@@ -63,6 +69,15 @@ const WorkspaceUI = (() => {
         const note=document.createElement('p'); note.className='ws-stale-note'; note.textContent='输入或规则已变化，此处为旧结果，请重新计算。'; node.prepend(note);
       }
     }
+  }
+  function invalidate() {
+    cancelSearch();
+    markStale(...(adapter?.resultIds || []));
+  }
+
+  function priceInputValue(bidder) {
+    if (typeof bidder.priceInput==='string' && (bidder.priceInputError || Scoring.normalizePriceInput(bidder.priceInput)===bidder.price)) return bidder.priceInput;
+    return bidder.price>0?String(bidder.price):'';
   }
   function fresh(...ids) {
     for (const id of ids) { $(id)?.classList.remove('ws-stale'); $(id)?.querySelectorAll('.ws-stale-note').forEach(n=>n.remove()); }
@@ -90,7 +105,7 @@ const WorkspaceUI = (() => {
     const panel=document.createElement('section'); panel.className='ws-panel';
     panel.innerHTML=`<div class="ws-title">项目工作区</div>
       <div class="ws-row"><label>当前项目<select id="ws-project" aria-label="当前项目"></select></label><label>项目名称<input id="ws-name" maxlength="200"></label></div>
-      <div class="ws-actions"><button id="ws-new">新建项目</button><button id="ws-copy">复制项目</button><button id="ws-export">导出项目</button><label class="ws-file">导入项目<input id="ws-import" type="file" accept=".json,application/json"></label><button id="ws-report">导出测算报告</button><button id="ws-reload">重新加载</button></div>
+      <div class="ws-actions"><button id="ws-new">新建项目</button><button id="ws-copy">复制项目</button><button id="ws-export">导出项目</button><label class="ws-file">导入项目<input id="ws-import" type="file" accept=".json,application/json"></label><button id="ws-report">导出测算报告</button><button id="ws-reload">重新加载</button><button id="ws-export-recovery" hidden>导出原始存储备份</button></div>
       <p id="ws-status" role="status" aria-live="polite">数据保存在此浏览器，跨设备请使用项目文件导入/导出。</p>
       <details><summary>规则模板与录入口径</summary><div class="ws-row"><button id="ws-raw">按分值构成录入原始分</button><button id="ws-percent">商务/技术使用百分制</button><button id="ws-template-save">保存当前规则模板</button><select id="ws-templates" aria-label="规则模板"></select></div><p class="ws-note">切换口径保留原始数值，不自动转换已录入分数；超出新上限时会提示修正。</p><div id="ws-rules"></div></details>
       <details><summary>批量录入与参与状态</summary><p class="ws-note">从 Excel 复制：名称、报价、商务分、技术分（后两列可省略，默认为0）。先预览再追加，不覆盖现有样本。</p><textarea id="ws-paste" rows="4" placeholder="名称 ⇥ 报价 ⇥ 商务分 ⇥ 技术分"></textarea><div class="ws-actions"><button id="ws-preview">预览</button><button id="ws-append" disabled>追加样本</button></div><div id="ws-preview-result"></div><div id="ws-participants"></div></details>
@@ -102,6 +117,11 @@ const WorkspaceUI = (() => {
     $('ws-new').onclick=()=>transact(()=>{if(!save())return;const data=Workspace.clone(defaults);data.config.projectName='新项目';data.bidders=data.bidders.slice(0,1).map(b=>({...b,price:0,businessScore:0,techScore:0}));data.scenarios=[];data.search={};apply(store.add(data));refresh();save(true);});
     $('ws-copy').onclick=()=>transact(()=>{if(!save())return;const data=snapshot();data.config.projectName=(data.config.projectName||'未命名项目')+' 副本';apply(store.add(data));refresh();save(true);});
     $('ws-export').onclick=()=>{captureSearch();download((state.config.projectName||'项目')+'.json',Workspace.exportProject(snapshot()));};
+    $('ws-export-recovery').onclick=()=>transact(()=>{
+      const raw=localStorage.getItem(Workspace.KEY) || localStorage.getItem('bid-scorer-desktop-state-v1');
+      if (!raw) throw new Error('没有可导出的原始存储');
+      download('浏览器工作区-原始恢复备份.json',raw);
+    });
     $('ws-import').onchange=async e=>{
       try { const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024)throw new Error('文件不能大于10MB');const data=Workspace.importProject(await file.text());if(!save())return;apply(store.add(data));refresh();save(true); }
       catch(error){status(error.message,true);} finally{e.target.value='';}
@@ -118,7 +138,7 @@ const WorkspaceUI = (() => {
     for (const [key,id] of Object.entries(adapter.searchIds)) if ($(id) && state.search?.[key]!=null) $(id).value=state.search[key];
     mountSearch();
     renderProjects();renderRules();renderSnapshots();renderScenarios();
-    if(loadError)status(loadError,true);
+    if(loadError){status('未加载原项目：'+loadError+'。原存储已保留，可导出原始存储备份。',true);$('ws-export-recovery').hidden=false;}
     else save(true);
     fingerprint=calculationKey();
     document.addEventListener('input',handleChange);
@@ -133,8 +153,10 @@ const WorkspaceUI = (() => {
   function renderRules() {
     if(!$('ws-rules'))return;
     const c=state.config;
+    if ($(adapter.priceScaleId)) $(adapter.priceScaleId).innerHTML=RuleUI.scaleHtml(c);
+    if ($('ws-required-label')) $('ws-required-label').textContent=`目标价格原始分（公式满分${c.priceFull}）`;
     const errors=Scoring.validateConfig(c,state.bidders);
-    $('ws-rules').innerHTML=`<p>${esc(Scoring.describeRule(c))}</p>${c.priceStrategy==='outlierFilteredBenchmark'?`<label class="ws-participant"><input type="checkbox" id="ws-special-rule" ${c.strategyParams.outlierSpecialFullScore!==0&&c.strategyParams.outlierSpecialFullScore!==false?'checked':''}>启用技术最高且最低价满分</label>`:''}<p>综合分 = 商务原始分 ÷ ${esc(c.businessFull)} × ${esc(c.businessWeight)} + 价格分 ÷ ${esc(c.priceFull)} × ${esc(c.priceWeight)} + 技术原始分 ÷ ${esc(c.techFull)} × ${esc(c.techWeight)}</p>${errors.length?`<p class="ws-error">${errors.map(esc).join('；')}</p>`:'<p>当前规则与综合评分输入校验通过。</p>'}`;
+    $('ws-rules').innerHTML=`<p>${esc(Scoring.describeRule(c))}</p>${c.priceStrategy==='outlierFilteredBenchmark'?`<label class="ws-participant"><input type="checkbox" id="ws-special-rule" ${c.strategyParams.outlierSpecialFullScore!==0&&c.strategyParams.outlierSpecialFullScore!==false?'checked':''}>启用技术最高且最低价满分</label>`:''}<p>综合分 = 商务原始分 ÷ ${esc(c.businessFull)} × ${esc(c.businessWeight)} + 价格原始分 ÷ ${esc(c.priceFull)} × ${esc(c.priceWeight)} + 技术原始分 ÷ ${esc(c.techFull)} × ${esc(c.techWeight)}</p>${errors.length?`<p class="ws-error">${errors.map(esc).join('；')}</p>`:'<p>当前规则与综合评分输入校验通过。</p>'}`;
     if($('ws-special-rule'))$('ws-special-rule').onchange=e=>{state.config.strategyParams.outlierSpecialFullScore=e.target.checked?1:0;invalidate();save();renderRules();};
     $('ws-participants').innerHTML=state.bidders.map((b,i)=>`<label class="ws-participant"><input type="checkbox" data-index="${i}" ${b.enabled!==false?'checked':''}>${esc(b.name)}${b.isMe?'（目标）':''} · ${b.priceInputError?'格式错误':b.price>0?fmt(b.price):'未报价'}</label>`).join('');
     $('ws-participants').querySelectorAll('input').forEach(input=>input.onchange=()=>{state.bidders[+input.dataset.index].enabled=input.checked;invalidate();save();renderRules();});
@@ -148,7 +170,7 @@ const WorkspaceUI = (() => {
 
   function mountSearch() {
     const panel=document.createElement('section');panel.id='ws-search';panel.className='ws-panel';
-    panel.innerHTML=`<div class="ws-title">搜索目标与情景</div><div class="ws-row"><label>选择目标<select id="ws-objective"><option value="topRate">价格第一情景占比优先</option><option value="minScore">最差情景得分优先</option><option value="avgScore">加权平均得分优先</option><option value="threshold">全部情景达标后报价最高</option></select></label><label>最低可接受报价<input id="ws-floor" type="number" min="0" placeholder="可选"></label><label>目标价格分<input id="ws-required" type="number" min="0" value="0"></label></div>
+    panel.innerHTML=`<div class="ws-title">搜索目标与情景</div><div class="ws-row"><label>选择目标<select id="ws-objective"><option value="topRate">价格第一情景占比优先</option><option value="minScore">最差情景得分优先</option><option value="avgScore">加权平均得分优先</option><option value="threshold">全部情景达标后报价最高</option></select></label><label>最低可接受报价<input id="ws-floor" type="number" min="0" placeholder="可选"></label><label><span id="ws-required-label">目标价格原始分</span><input id="ws-required" type="number" min="0" value="0"></label></div>
       <label>特殊满分条件<select id="ws-special"><option value="priceOnly">仅按报价公式，不采用技术分特殊条件</option><option value="technical">采用已填写技术分（需完整数据）</option></select></label>
       <details><summary>表格管理情景（支持任意样本数量与权重）</summary><label class="ws-participant"><input type="checkbox" id="ws-use-scenarios">使用下方情景表，替代文本情景</label><button id="ws-add-scenario">从当前样本新增情景</button><p class="ws-note">报价使用分号分隔，每个技术分与报价一一对应。权重表示相对重视程度，不代表实际发生概率。</p><div id="ws-scenario-rows"></div></details>
       <div id="ws-search-status" role="status"></div><button id="ws-cancel" hidden>取消测算</button><div id="ws-ranges"></div>`;
@@ -192,7 +214,6 @@ const WorkspaceUI = (() => {
     $('ws-scenario-rows').querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{state.search.rows.splice(+b.dataset.remove,1);renderScenarios();invalidate();save();});
   }
   function validateCurrentScenario() {
-    if (!['piecewiseAverage', 'qualifiedMeanBenchmark'].includes(state.config.priceStrategy)) return;
     const others = state.bidders.filter(b=>b.id !== $(adapter.searchIds.target).value);
     const errors = Scoring.validateConfig(state.config, others, true);
     if (errors.length) throw new Error(errors.join('；'));
@@ -236,16 +257,33 @@ const WorkspaceUI = (() => {
     return result;
   }
   function exportReport() {
-    const data=snapshot();const errors=Scoring.validateConfig(data.config,data.bidders);if(errors.length)throw new Error(errors.join('；'));
+    captureSearch();
+    const data=snapshot();
     const result=Scoring.evaluate(data.bidders,data.config);
     const count=Scoring.summarizeBidValidity(data.bidders);
-    const details=result.map(b=>`<tr><td>${esc(b.name)}</td><td>${fmt(b.price)}</td><td>${b.priceRank}${b.priceTied?'（并列）':''}</td><td>${b.priceScore.toFixed(2)}</td><td>${b.businessScore}</td><td>${b.techScore}</td><td>${b.total.toFixed(4)}</td><td>${b.rank}${b.tied?'（并列）':''}</td><td>${b.benchmark==null?'—':fmt(b.benchmark)}</td></tr>`).join('');
-    const body=`<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><title>测算报告</title><style>body{font:14px sans-serif;margin:32px;color:#172b4d}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:8px}th{background:#eef3f8}pre{white-space:pre-wrap}button{padding:8px}@media print{button{display:none}}</style><h1>${esc(data.config.projectName||'报价测算')}</h1><p>生成时间：${esc(new Date().toLocaleString())}</p><p>${esc(Scoring.describeRule(data.config))}</p><p>分值构成：${data.config.businessWeight}/${data.config.priceWeight}/${data.config.techWeight}；录入满分：${data.config.businessFull}/${data.config.priceFull}/${data.config.techFull}</p><p>已建立${count.totalCount}个，有效${count.validCount}个。未参与：${count.invalidBidders.map(b=>esc(b.name)).join('、')||'无'}</p>${trace(result)}<table><thead><tr><th>名称</th><th>报价</th><th>价格排名</th><th>价格分</th><th>商务</th><th>技术</th><th>总分</th><th>综合排名</th><th>基准价</th></tr></thead><tbody>${details}</tbody></table><p>同分采用并列排名。规则及数据取自本次导出的项目状态。</p><details><summary>完整复核数据</summary><pre>${esc(Workspace.exportProject(data))}</pre></details><button onclick="window.print()">打印 / 保存PDF</button></html>`;
-    download((data.config.projectName||'测算')+'-报告.html',body,'text/html');status('报告已导出，可打开后打印为PDF');
+    const details=result.map(b=>`<tr>
+      <td>${esc(b.name)}</td><td>${esc(String(b.price))}</td><td>${b.priceRank}${b.priceTied?'（并列）':''}</td>
+      <td>${b.priceScore.toFixed(2)}</td><td>${RuleUI.contributionHtml(b.priceScore,data.config)}</td>
+      <td>${b.businessScore}</td><td>${b.techScore}</td><td>${b.total.toFixed(4)}</td>
+      <td>${b.rank}${b.tied?'（并列）':''}</td><td>${b.benchmark==null?'—':fmt(b.benchmark)}</td>
+    </tr>`).join('');
+    const c=data.config;
+    const body=`<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><title>测算报告</title>
+      <style>body{font:14px sans-serif;margin:32px;color:#172b4d}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:8px}th{background:#eef3f8}pre{white-space:pre-wrap}button{padding:8px}.ws-scale{background:#eef3f8;padding:12px;margin:12px 0;line-height:1.6}.ws-contribution-unit{white-space:nowrap}@media print{button{display:none}}</style>
+      <h1>${esc(c.projectName||'报价测算')}</h1><p>生成时间：${esc(new Date().toLocaleString())}</p>
+      <p>${esc(Scoring.describeRule(c))}</p>${RuleUI.scaleHtml(c)}
+      <p>分值构成：商务${c.businessWeight} / 价格${c.priceWeight} / 技术${c.techWeight}；商务/技术录入满分：${c.businessFull} / ${c.techFull}；价格公式满分：${c.priceFull}。</p>
+      <p>综合分 = 商务原始分 ÷ ${c.businessFull} × ${c.businessWeight} + 价格原始分 ÷ ${c.priceFull} × ${c.priceWeight} + 技术原始分 ÷ ${c.techFull} × ${c.techWeight}，各项不提前舍入，合计保留四位。价格计入综合分列显示四位。</p>
+      <p>已建立${count.totalCount}个，有效${count.validCount}个。未参与：${count.invalidBidders.map(b=>esc(b.name)).join('、')||'无'}</p>${trace(result,c)}
+      <table><thead><tr><th>名称</th><th>评标价格</th><th>价格排名</th><th>价格原始分（满分${c.priceFull}）</th><th>价格计入综合分（分值${c.priceWeight}）</th><th>商务</th><th>技术</th><th>总分</th><th>综合排名</th><th>基准价</th></tr></thead><tbody>${details}</tbody></table>
+      <p>同分采用并列排名。规则及数据取自本次导出的项目状态。</p><details><summary>完整复核数据</summary><pre>${esc(Workspace.exportProject(data))}</pre></details>
+      <button onclick="window.print()">打印 / 保存PDF</button></html>`;
+    download((c.projectName||'测算')+'-报告.html',body,'text/html');
+    status('报告已导出，可打开后打印为PDF');
   }
-  function trace(rows) {
+  function trace(rows,config=state.config) {
     const b=rows.find(b=>b.benchmark>0);if(!b)return '';
-    return `<details class="ws-trace"><summary>基准价 ${fmt(b.benchmark)} · 查看计算过程</summary><p>${esc(Scoring.describeRule(state.config))}</p>${b.meanEvaluatedPrice!=null?`<p>合格评标价格的算术平均值：${fmt(b.meanEvaluatedPrice)}；基准价显示最多6位小数，计算不提前舍入。</p>`:''}${b.preliminaryAverage!=null?`<p>初始均价：${fmt(b.preliminaryAverage)}；高价阈值：${fmt(b.exclusionThreshold)}；不纳入均价：${(b.excludedHighBidderNames||[]).map(esc).join('、')||'无'}</p>`:''}${b.validBidCount!=null?`<p>有效${b.validBidCount}个；${b.trimCount!=null?'两端各去'+b.trimCount+'个；':''}纳入均价${b.includedBidCount}个。</p>`:''}<p>偏差率 =（报价 − 基准价）÷ 基准价 × 100%；${state.config.priceStrategy==='piecewiseAverage'?'按相邻K节点线性插值，首末节点外使用固定分，再按选定舍入口径计分。':'按所选规则的高低侧斜率及舍入顺序计分，再应用得分上下限与特殊条件。'}</p></details>`;
+    return `<details class="ws-trace"><summary>基准价 ${fmt(b.benchmark)} · 查看计算过程</summary><p>${esc(Scoring.describeRule(config))}</p>${b.meanEvaluatedPrice!=null?`<p>合格评标价格的算术平均值：${fmt(b.meanEvaluatedPrice)}；基准价显示最多6位小数，计算不提前舍入。</p>`:''}${b.preliminaryAverage!=null?`<p>初始均价：${fmt(b.preliminaryAverage)}；高价阈值：${fmt(b.exclusionThreshold)}；不纳入均价：${(b.excludedHighBidderNames||[]).map(esc).join('、')||'无'}</p>`:''}${b.validBidCount!=null?`<p>有效${b.validBidCount}个；${b.trimCount!=null?'两端各去'+b.trimCount+'个；':''}纳入均价${b.includedBidCount}个。</p>`:''}<p>偏差率 =（报价 − 基准价）÷ 基准价 × 100%；${config.priceStrategy==='piecewiseAverage'?'按相邻K节点线性插值，首末节点外使用固定分，再按选定舍入口径计分。':'按所选规则的高低侧斜率及舍入顺序计分，再应用得分上下限与特殊条件。'}</p></details>`;
   }
   function resultTools(rows) {
     const view=state.resultView||{sort:'rank',query:''};
@@ -261,5 +299,5 @@ const WorkspaceUI = (() => {
     return `<p class="ws-note">${different?'这些方案的规则或其他样本条件不同，分数不可直接视为同条件优劣。可恢复为新项目核对。':'方案记录保存时的结果；修改当前规则不会改写历史方案。'}${state.scenarios.some(s=>!s.snapshot)?' 部分旧方案仅保留摘要，无法完整复算。':''}</p>`;
   }
   function sortedResults(rows){const view=state.resultView||{sort:'rank',query:''};return rows.filter(b=>!view.query||b.name.toLowerCase().includes(view.query.toLowerCase())).slice().sort((a,b)=>view.sort==='priceAsc'?a.price-b.price:view.sort==='priceDesc'?b.price-a.price:view.sort==='priceRank'?a.priceRank-b.priceRank:a.rank-b.rank);}
-  return {load,mount,save,refresh,renderRules,renderSnapshots,invalidate,fresh,createSnapshot,scenarios,search,trace,esc,resultTools,changeView,sortedResults,comparisonHint};
+  return {load,mount,save,refresh,renderRules,renderSnapshots,invalidate,markStale,fresh,inputKey,priceInputValue,createSnapshot,scenarios,search,trace,esc,resultTools,changeView,sortedResults,comparisonHint};
 })();
