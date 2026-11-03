@@ -6,6 +6,7 @@
   <title>投标评分分析工具</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/workspace.css">
+  <link rel="stylesheet" href="css/desktop.css">
 </head>
 <body>
 
@@ -37,6 +38,7 @@
 
     <input type="hidden" id="cfg-project">
 
+    <div class="config-columns">
     <div class="card">
       <div class="card-title">综合分值构成与评分口径
         <span id="weight-sum" class="weight-sum err">分值合计：100</span>
@@ -71,7 +73,9 @@
         </div>
         </div></fieldset>
       </div>
+      <details class="compact-disclosure"><summary>分值与满分怎么填</summary>
       <p class="note">三项分值构成合计100。商务、技术录入满分按实际分数填写；价格公式满分按招标公式填写。例如价格占35分、公式从100分扣分时，价格分值填35，价格公式满分填100。</p>
+      </details>
       <div id="price-scale-note" aria-live="polite"></div>
     </div>
 
@@ -86,15 +90,6 @@
       <div id="strategy-params-container"></div>
     </div>
 
-    <div class="card">
-      <div class="card-title">快速加载预设方案</div>
-      <div class="form-row preset-actions">
-        <button class="btn btn-primary btn-sm" onclick="loadPreset('gov')">通用评分模板</button>
-        <button class="btn btn-primary btn-sm" onclick="loadPreset('infra')">价格权重较高</button>
-        <button class="btn btn-primary btn-sm" onclick="loadPreset('tech')">技术权重较高</button>
-        <button class="btn btn-primary btn-sm" onclick="loadPreset('lowest')">价格优先模板</button>
-      </div>
-      <p class="note">预设仅用于演示，请根据实际适用规则独立调整参数</p>
     </div>
 
     <div class="card">
@@ -106,111 +101,68 @@
       </div>
     </div>
 
+
+    <details class="card compact-disclosure">
+      <summary>快速加载预设方案</summary>
+      <div class="form-row preset-actions">
+        <button class="btn btn-primary btn-sm" onclick="loadPreset('gov')">通用评分模板</button>
+        <button class="btn btn-primary btn-sm" onclick="loadPreset('infra')">价格权重较高</button>
+        <button class="btn btn-primary btn-sm" onclick="loadPreset('tech')">技术权重较高</button>
+        <button class="btn btn-primary btn-sm" onclick="loadPreset('lowest')">价格优先模板</button>
+      </div>
+      <p class="note">预设仅用于演示，请根据实际适用规则独立调整参数</p>
+    </details>
+
   </div>
 
   <!-- ===================== Tab 3: 综合评分 ===================== -->
   <div class="tab-panel" id="tab-result">
-
-    <div class="card">
-      <div class="card-title">报价与评分录入</div>
-      <p class="note" style="margin-bottom:12px;">
-        报价样本名称在“① 评分规则配置”中管理；价格得分由系统根据报价和当前评分方法自动计算。报价支持输入 4500000 或 4,500,000。
-      </p>
-      <p class="table-scroll-hint">窄屏可在表格内左右滑动，查看全部录入项。</p>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="报价与评分录入表，可横向滚动">
-        <table class="bidder-input-table">
-          <colgroup><col style="width:8%"><col style="width:32%"><col style="width:24%"><col style="width:18%"><col style="width:18%"></colgroup>
-          <thead>
-            <tr>
-              <th>序号</th>
-              <th>名称</th>
-              <th>报价（元）</th>
-              <th>商务得分<br><small id="bidder-business-full-label">（满分100）</small></th>
-              <th>技术得分<br><small id="bidder-tech-full-label">（满分100）</small></th>
-            </tr>
-          </thead>
-          <tbody id="bidder-tbody"></tbody>
+    <div class="workbench-heading">
+      <div><h2>综合评分</h2><p class="note">直接在表内修改报价、商务和技术得分，重新计算后查看排名。</p></div>
+      <button class="btn btn-success" id="btn-calc-result">计算综合评分</button>
+    </div>
+    <div id="result-area" class="scoring-workbench">
+      <div class="summary-grid" id="result-summary"></div>
+      <div id="result-weight-info" class="workbench-rule"></div>
+      <div id="result-bid-status"></div>
+      <div id="result-explanations" class="compact-explanations"></div>
+      <div id="result-tools"></div>
+      <p class="table-scroll-hint">窄屏可在表格内左右滑动，查看全部评分项。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="综合评分录入与明细表，可横向滚动">
+        <table class="composite-score-table editable-score-table">
+          <colgroup><col style="width:7%"><col style="width:23%"><col style="width:16%"><col style="width:9%"><col style="width:9%"><col style="width:11%"><col style="width:13%"><col style="width:12%"></colgroup>
+          <thead id="result-table-head"></thead>
+          <tbody id="result-table-body"></tbody>
         </table>
       </div>
-      <div class="flex-end" style="margin-top:12px;">
-        <button class="btn btn-success" id="btn-calc-result">计算综合评分</button>
-      </div>
     </div>
-
-    <div id="result-area" style="display:none;">
-      <div class="card">
-        <div id="result-weight-info" style="font-size:12px;color:#666;margin-bottom:12px;"></div>
-        <div id="result-bid-status"></div>
-        <div class="summary-grid" id="result-summary"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">综合评分明细</div>
-        <p class="table-scroll-hint table-scroll-hint-wide">可在表格内左右滑动，查看全部评分明细。</p>
-        <div class="table-wrap" tabindex="0" role="region" aria-label="综合评分明细表，可横向滚动">
-          <table class="composite-score-table">
-            <colgroup><col style="width:8%"><col style="width:18%"><col style="width:12%"><col style="width:7%"><col style="width:11%"><col style="width:9%"><col style="width:11%"><col style="width:8%"><col style="width:8%"><col style="width:8%"></colgroup>
-            <thead id="result-table-head"></thead>
-            <tbody id="result-table-body"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="flex-end">
-        <button class="btn btn-primary" onclick="saveScenarioFromResult()">保存为方案 →</button>
-        <button class="btn btn-success" onclick="switchTab('tab-optimize')">报价策略分析 →</button>
-      </div>
+    <div class="flex-end workbench-footer">
+      <button class="btn btn-primary" onclick="saveScenarioFromResult()">保存为方案 →</button>
+      <button class="btn btn-primary" onclick="switchTab('tab-optimize')">报价策略分析 →</button>
     </div>
-
   </div>
 
   <!-- ===================== Tab 4: 优化 ===================== -->
   <div class="tab-panel" id="tab-optimize">
 
-    <!-- 分组一：场景模拟 -->
-    <div class="section-header">
-      <span class="section-num">①</span>
-      场景模拟
-      <span class="section-desc">输入独立报价样本，查看价格得分与排名</span>
+    <div class="workbench-heading">
+      <div><h2>报价评分</h2><p class="note">报价与综合评分共用，修改后保存到当前项目。金额单位：元。</p></div>
+      <button class="btn btn-success" id="btn-predict-calc">计算价格得分与排名</button>
     </div>
+    <div id="predict-result-box" class="scoring-workbench"></div>
 
-    <div class="card">
-      <div class="card-title">即时报价模拟</div>
-      <p class="note" style="margin-bottom:12px;">
-        输入假设报价，按当前规则计算价格得分与排名。这里与“③ 综合评分”共用报价数据；修改后会保存到当前项目。综合分含商务、技术得分。
-      </p>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="假设报价录入表">
-        <table class="predict-input-table">
-          <colgroup><col style="width:55%"><col style="width:45%"></colgroup>
-          <thead>
-            <tr>
-              <th>报价样本</th>
-              <th>假设报价（元）</th>
-            </tr>
-          </thead>
-          <tbody id="predict-tbody"></tbody>
-        </table>
-      </div>
-      <div class="flex-end" style="margin-top:12px;">
-        <button class="btn btn-success" id="btn-predict-calc">计算价格得分与排名</button>
-      </div>
-      <div id="predict-result-box" style="margin-top:24px;"></div>
-    </div>
-
-    <!-- 分组二：目标报价决策 -->
-    <div class="section-header" style="margin-top:24px;">
-      <span class="section-num">②</span>
-      目标报价决策
-      <span class="section-desc">目标报价未定时，搜索最优报价并分析得分区间</span>
-    </div>
-
-    <div class="card">
-      <div class="card-title">最优报价搜索</div>
+    <details id="desktop-search" class="card compact-disclosure">
+      <summary>最优报价搜索与敏感性分析 <span>按需展开</span></summary>
+      <div class="search-content">
+    <div class="search-setup">
+      <div class="search-assumptions">
       <div class="form-group form-block">
         <label for="opt-target">本次独立分析目标（每次仅选择一个）</label>
         <select id="opt-target"></select>
       </div>
       <div class="form-group form-block">
         <label for="opt-scenarios">其他报价样本情景（每行一个情景，不包含目标报价）</label>
-        <textarea id="opt-scenarios" rows="6" placeholder="总5个: 1010000, 1030000, 1070000, 1090000&#10;总8个: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11个: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
+        <textarea id="opt-scenarios" rows="3" placeholder="总5个: 1010000, 1030000, 1070000, 1090000&#10;总8个: 980000, 1000000, 1020000, 1040000, 1060000, 1090000, 1120000&#10;总11个: 950000, 970000, 990000, 1010000, 1030000, 1050000, 1070000, 1090000, 1120000, 1150000"></textarea>
       </div>
       <div class="form-grid search-range-grid">
         <div class="form-group">
@@ -229,13 +181,15 @@
           <button class="btn btn-success" id="btn-search-optimal">搜索最优报价</button>
         </div>
       </div>
+      </div>
+      <div id="desktop-search-options"></div>
       <p class="note">每次只改变所选目标报价。文本情景每行一个，金额用分号或空格分隔，不含千位分隔符；也可启用下方情景表并设置权重。人数包含目标，按当前配置自动匹配分档规则。搜索目标、报价底线和特殊条件均可配置。第一情景比例不是实际发生概率。</p>
     </div>
 
     <div id="optimize-result-box"></div>
 
-    <div class="card" id="sensitivity-card" style="margin-top:16px;">
-      <div class="card-title">价格敏感性分析</div>
+    <details class="card compact-disclosure" id="sensitivity-card" style="margin-top:10px;">
+      <summary>价格敏感性分析</summary>
       <p class="note" style="margin-bottom:10px;">展示不同目标报价在全部自定义情景中的价格得分并列第一比例、最低分和平均分</p>
       <p class="table-scroll-hint">窄屏可在表格内左右滑动。</p>
       <div class="table-wrap sensitivity-chart" tabindex="0" role="region" aria-label="价格敏感性分析表，可横向滚动">
@@ -251,8 +205,10 @@
           <tbody id="sensitivity-tbody"></tbody>
         </table>
       </div>
-    </div>
+    </details>
 
+      </div>
+    </details>
   </div>
 
   <!-- ===================== Tab 5: 方案对比 ===================== -->
@@ -295,15 +251,15 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">用途与边界</div>
+    <details class="card compact-disclosure">
+      <summary>用途与边界</summary>
       <ul style="line-height:2.2;font-size:13px;color:#555;padding-left:20px;">
         <li>本工具只对用户独立输入的假设数据执行公开公式计算。</li>
         <li>系统只搜索目标报价，其他样本始终保持用户输入值不变。</li>
         <li>页面中的名称和示例数字均为虚构，不对应任何真实项目或参与主体。</li>
         <li>测算结果仅用于内部分析，不构成任何专业意见。</li>
       </ul>
-    </div>
+    </details>
 
   </div>
 

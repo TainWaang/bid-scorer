@@ -63,7 +63,7 @@ const WorkspaceUI = (() => {
   function markStale(...ids) {
     for (const id of ids) {
       const node=$(id);
-      if (!node || !node.textContent.trim()) continue;
+      if (!node || node.dataset.resultReady === 'false' || !node.textContent.trim()) continue;
       node.classList.add('ws-stale');
       if (!node.querySelector('.ws-stale-note')) {
         const note=document.createElement('p'); note.className='ws-stale-note'; note.textContent='输入或规则已变化，此处为旧结果，请重新计算。'; node.prepend(note);
@@ -174,7 +174,8 @@ const WorkspaceUI = (() => {
       <label>特殊满分条件<select id="ws-special"><option value="priceOnly">仅按报价公式，不采用技术分特殊条件</option><option value="technical">采用已填写技术分（需完整数据）</option></select></label>
       <details><summary>表格管理情景（支持任意样本数量与权重）</summary><div class="ws-actions"><label class="ws-participant"><input type="checkbox" id="ws-use-scenarios">使用下方情景表，替代文本情景</label><button id="ws-add-scenario">从当前样本新增情景</button></div><p class="ws-note">报价使用分号分隔，每个技术分与报价一一对应。权重表示相对重视程度，不代表实际发生概率。</p><div id="ws-scenario-rows"></div></details>
       <div id="ws-search-status" role="status"></div><button id="ws-cancel" hidden>取消测算</button><div id="ws-ranges"></div>`;
-    $(adapter.searchIds.scenarios).parentElement.after(panel);
+    if (adapter.searchHost) $(adapter.searchHost).append(panel);
+    else $(adapter.searchIds.scenarios).parentElement.after(panel);
     const values=state.search?.options||{};
     for(const [key,id] of Object.entries({objective:'ws-objective',floorPrice:'ws-floor',requiredScore:'ws-required',specialMode:'ws-special'}))if(values[key]!=null)$(id).value=values[key];
     $('ws-use-scenarios').checked=!!state.search?.useTable;

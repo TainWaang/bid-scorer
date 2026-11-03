@@ -1,3 +1,5 @@
+async function openDesktopTools(page) {const d=page.locator('#desktop-project-tools');if(await d.count() && !await d.evaluate(el=>el.open))await d.locator(':scope > summary').click();}
+async function openDesktopSearch(page) {const d=page.locator('#desktop-search');if(await d.count() && !await d.evaluate(el=>el.open))await d.locator(':scope > summary').click();}
 // Responsive layout acceptance uses isolated storage and synthetic long names.
 module.exports = async function({browser,base,checks,errors,dir}) {
   const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
@@ -29,6 +31,10 @@ module.exports = async function({browser,base,checks,errors,dir}) {
       return {viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,overflow,overlaps,cells};
     });
     layouts.push({label,...result});
+    if(result.documentWidth>result.viewport+1 && dir) {
+      fs.mkdirSync(dir,{recursive:true});
+      fs.writeFileSync(path.join(dir,'layout-overflow.json'),JSON.stringify(await page.evaluate(()=>[...document.querySelectorAll('.ws-panel,.ws-panel details,.ws-scroll,.ws-row,.container,.tab-panel.active')].filter(el=>el.getBoundingClientRect().width).map(el=>({node:el.id||el.className||el.tagName,width:el.clientWidth,scroll:el.scrollWidth,minWidth:getComputedStyle(el).minWidth}))),null,2));
+    }
     assert.ok(result.documentWidth<=result.viewport+1,`${label}: page expands beyond viewport`);
     assert.deepEqual(result.overflow,[],`${label}: a panel expands beyond its container`);
     assert.deepEqual(result.overlaps,[],`${label}: controls overlap`);
@@ -49,9 +55,11 @@ module.exports = async function({browser,base,checks,errors,dir}) {
     await page.screenshot({path:path.join(dir,name+'.png')});
   }
   async function search(mobile=false) {
+    if(!mobile)await openDesktopSearch(page);
     for(const [id,value] of [['min','1200000'],['max','1300000'],['step','10000']])await page.locator('#'+(mobile?'m-opt-':'opt-')+id).fill(value);
     await page.getByRole('button',{name:'搜索最优报价',exact:true}).click();
     await page.locator('#ws-search-status').filter({hasText:'测算完成'}).waitFor();
+    if(!mobile){await page.locator('#desktop-search-details').evaluate(el=>el.open=true);await page.locator('#sensitivity-card').evaluate(el=>el.open=true);}
   }
   try {
     await page.goto(base);
@@ -73,9 +81,10 @@ module.exports = async function({browser,base,checks,errors,dir}) {
     for(const width of [1365,1024,768,390]) {
       await page.setViewportSize({width,height:1000});
       await page.locator('[data-tab=tab-config]').click();
-      await page.locator('#tab-config>.ws-panel details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
+      await page.locator('.desktop-workspace details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
       await page.locator('#ws-paste').fill('批量预览的长名称测试样本\t1234567\t8\t50');await page.locator('#ws-preview').click();
       await layout('#tab-config','desktop config '+width);
+      await layout('.desktop-workspace','desktop project tools '+width);
       if(width===390)await scrollable('#ws-preview-result .ws-scroll');
       if(width===1365||width===390)await capture('layout-desktop-'+width+'-config','#strategy-params-container');
       await page.locator('[data-tab=tab-result]').click();
@@ -112,7 +121,7 @@ module.exports = async function({browser,base,checks,errors,dir}) {
     await page.reload();
     for(const width of [1365,1024,390]) {
       await page.setViewportSize({width,height:1000});await page.locator('[data-tab=tab-result]').click();
-      assert.equal(await page.locator('#result-table-body tr').count(),3);
+      assert.equal(await page.locator('#result-table-body tr[data-scored]').count(),3);
       assert.match(await page.locator('#result-table-body tr').first().locator('td').first().innerText(),/1.*并列/);
       await layout('#tab-result','tied first place with trophy '+width);
       await page.locator('[data-tab=tab-optimize]').click();await page.locator('#btn-predict-calc').click();
@@ -121,7 +130,7 @@ module.exports = async function({browser,base,checks,errors,dir}) {
     await page.evaluate(raw=>localStorage.setItem('bid-scorer-workspace-v2',raw),savedWorkspace);await page.reload();
     checks.push('tied first place and trophy remain within both ranking tables at desktop and narrow widths');
 
-    const waiting=page.waitForEvent('download');await page.locator('#ws-report').click();
+    const waiting=page.waitForEvent('download');await openDesktopTools(page);await page.locator('#ws-report').click();
     const html=fs.readFileSync(await (await waiting).path(),'utf8'),report=await context.newPage();
     report.on('pageerror',e=>errors.push(e.message));await report.setContent(html);
     assert.match(await report.locator('table').innerText(),/32\.9665/);
