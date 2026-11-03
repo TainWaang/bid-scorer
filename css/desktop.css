@@ -13,6 +13,7 @@
 .compact-explanations > details { flex: 0 1 auto; min-width: 0; padding: 0; margin: 0; border: 0; background: transparent; border-radius: 0; font-size: 12px; color: #365778; }
 .compact-explanations > details[open] { flex-basis: 100%; }
 .compact-explanations summary, .compact-disclosure > summary { cursor: pointer; font-weight: 600; }
+.compact-explanations > details > summary { font-size: inherit; line-height: 1.6; }
 .compact-explanations > details > p { padding: 0 10px; margin: 6px 0; }
 .compact-disclosure > summary { color: #23496e; font-size: 13px; line-height: 1.7; }
 .compact-disclosure > summary span { font-weight: 400; color: #64748b; margin-left: 8px; }

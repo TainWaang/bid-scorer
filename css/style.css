@@ -478,7 +478,7 @@ tr.rank-1 td:first-child::after {
 #predict-result-box .predict-rule-layout > .ws-scale-check { background: #fff8e8; border-color: #e8c87a; }
 #predict-result-box .predict-rule-layout > .ws-scale-check p { color: #79520d; }
 #predict-result-box .predict-rule-layout > .ws-trace { margin: 0; padding: 16px 20px; border: 1px solid #e2e8f0; background: #f8fafc; line-height: 1.8; }
-#predict-result-box .ws-trace summary { font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+#predict-result-box .ws-trace summary { overflow-wrap: anywhere; }
 #predict-result-box .ws-trace p { line-height: 1.9; }
 .predict-table-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 16px; }
 .predict-participants { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; line-height: 1.7; }
