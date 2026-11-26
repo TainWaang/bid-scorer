@@ -326,6 +326,9 @@ function renderResult() {
   let countDetailText = '';
   if (config.priceStrategy === 'tieredTrimmedBenchmark' && result[0]) {
     countDetailText = ` 去最高、最低各${result[0].trimCount}个，基准价平均值纳入${result[0].includedBidCount}个报价。`;
+  } else if (config.priceStrategy === 'compositeSlopeBenchmark' && result[0]) {
+    const droppedText = result[0].excludedOutlierCount ? `，均值剔除偏离超限${result[0].excludedOutlierCount}个（${result[0].excludedOutlierNames.map(escapeHtml).join('、')}）` : '';
+    countDetailText = ` ${result[0].trimCount ? `先去最高、最低各${result[0].trimCount}个` : '未去最高、最低值'}${droppedText}；入池最低价¥${fmt(result[0].lowestUsedPrice)}，修正均价¥${fmt(result[0].meanEvaluatedPrice)}（纳入${result[0].includedBidCount}个）。`;
   } else if (config.priceStrategy === 'qualifiedMeanBenchmark' && result[0]) {
     countDetailText = ` 基准价平均值纳入全部${result[0].includedBidCount}个有效评标价格。`;
   } else if (config.priceStrategy === 'outlierFilteredBenchmark' && result[0]) {
@@ -757,7 +760,7 @@ function fmt(num, maximumFractionDigits = 2, minimumFractionDigits = 0) {
   return Number(num).toLocaleString('zh-CN', { maximumFractionDigits, minimumFractionDigits });
 }
 function fmtBenchmark(num, strategy) {
-  if (strategy === 'qualifiedMeanBenchmark') return fmt(num, 6);
+  if (['qualifiedMeanBenchmark', 'compositeSlopeBenchmark'].includes(strategy)) return fmt(num, 6);
   return ['tieredTrimmedBenchmark','piecewiseAverage'].includes(strategy) ? fmt(num, 6, 6) : fmt(num);
 }
 function fmtPriceScore(score, strategy = State.config.priceStrategy) {
@@ -767,6 +770,9 @@ function formatBenchmarkCountDetails(bidder, strategy) {
   if (bidder?.validBidCount == null) return '';
   if (strategy === 'qualifiedMeanBenchmark') return `；有效${bidder.validBidCount}个，全部纳入平均`;
   if (strategy === 'piecewiseAverage') return `；参与${bidder.validBidCount}个，全部纳入算术均值`;
+  if (strategy === 'compositeSlopeBenchmark') {
+    return `；有效${bidder.validBidCount}个，去两端各${bidder.trimCount}个，剔除异常${bidder.excludedOutlierCount}个，均价纳入${bidder.includedBidCount}个`;
+  }
   if (strategy === 'tieredTrimmedBenchmark') {
     return `；有效${bidder.validBidCount}个，去两端各${bidder.trimCount}个，纳入平均${bidder.includedBidCount}个`;
   }
@@ -777,6 +783,9 @@ function formatBenchmarkCountDetails(bidder, strategy) {
 }
 function formatOptimizationInclusion(detail, strategy) {
   if (strategy === 'qualifiedMeanBenchmark') return `全部纳入${detail.includedBidCount}个`;
+  if (strategy === 'compositeSlopeBenchmark') {
+    return `两端各${detail.trimCount}个；异常剔除${detail.excludedOutlierCount ?? 0}个；均价纳入${detail.includedBidCount}个`;
+  }
   if (strategy === 'tieredTrimmedBenchmark') {
     return `最高/最低各${detail.trimCount}个；纳入${detail.includedBidCount}个`;
   }

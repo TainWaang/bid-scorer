@@ -83,6 +83,7 @@ test('all strategy parameter gates reject bad and accept valid counterparts',()=
     ['tieredTrimmedBenchmark',{tierMidThreshold:5,tierHighThreshold:10},46,{tierMidThreshold:10,tierHighThreshold:5},46],
     ['intervalScore',{benchmark:100},46,{benchmark:100,lowerPct:101},46],
     ['outlierFilteredBenchmark',{outlierCutoffMultiple:1.5},46,{outlierCutoffMultiple:1},46],
+    ['compositeSlopeBenchmark',{csWeightLow:.5,csWeightAvg:.5,csFreeLowPct:5,csLowMidLimitPct:10,csMinScore:60},100,{csWeightLow:.6,csWeightAvg:.6,csFreeLowPct:12,csLowMidLimitPct:10,csMinScore:101},100],
   ];
   for(const [name,good,full,bad,badFull] of cases){assert.equal(S.validateStrategyConfig(name,full,good).length,0,name);assert.ok(S.validateStrategyConfig(name,badFull,bad).length,name);}
 });
@@ -161,4 +162,55 @@ test('snapshot roundtrip retains rules, scores, samples and search options',()=>
   assert.throws(()=>W.importProject('{}'),/版本/);
   assert.throws(()=>W.importProject(W.exportProject({...full,bidders:[]})),/数量/);
   assert.throws(()=>W.importProject(W.exportProject({...full,config:{...config,priceFull:'<script>'}})),/规则数值/);
+});
+
+test('compositeSlopeBenchmark matches N<=5 and N>5 rules, ±30% outlier filter, 5-segment slopes and 60 floor',()=>{
+  const c={
+    businessWeight:5,priceWeight:45,techWeight:50,
+    businessFull:100,priceFull:100,techFull:100,
+    priceStrategy:'compositeSlopeBenchmark',
+    strategyParams:{
+      csTrimThreshold:5,csTrimCount:1,csOutlierPct:30,
+      csWeightLow:0.5,csWeightAvg:0.5,
+      csFreeLowPct:5,csLowMidLimitPct:10,csLowMidDeduct:0.2,csLowDeepDeduct:0.5,
+      csHighMidLimitPct:10,csHighMidDeduct:1,csHighDeepDeduct:1.2,csMinScore:60,
+    },
+  };
+  const n4=S.evaluatePrice([
+    {id:'us',name:'我方',price:587.5},
+    {id:'m',name:'对手主标',price:620},
+    {id:'p1',name:'伙伴1',price:740},
+    {id:'p2',name:'伙伴2',price:780},
+  ],c);
+  assert.equal(n4[0].trimCount,0);
+  assert.equal(n4[0].excludedOutlierCount,0);
+  assert.equal(n4[0].includedBidCount,4);
+  assert.equal(n4[0].benchmark,634.6875);
+  assert.equal(n4.find(b=>b.id==='us').priceScore,99.51);
+  assert.equal(n4.find(b=>b.id==='m').priceScore,100);
+  assert.equal(n4.find(b=>b.id==='p1').priceScore,82.09);
+
+  const n6=S.evaluatePrice([400,560,600,620,660,900].map((price,i)=>({id:`b${i}`,name:`S${i}`,price})),c);
+  assert.equal(n6[0].trimCount,1);
+  assert.equal(n6[0].lowestUsedPrice,560);
+  assert.equal(n6[0].meanEvaluatedPrice,610);
+  assert.equal(n6[0].benchmark,585);
+  assert.equal(n6.find(b=>b.price===400).priceScore,88.19);
+  assert.equal(n6.find(b=>b.price===900).priceScore,60);
+
+  const outlier=S.evaluatePrice([100,100,100,220].map((price,i)=>({id:`o${i}`,name:`O${i}`,price})),c);
+  assert.equal(outlier[0].preliminaryAverage,130);
+  assert.equal(outlier[0].excludedOutlierCount,1);
+  assert.deepEqual(outlier[0].excludedOutlierNames,['O3']);
+  assert.equal(outlier[0].meanEvaluatedPrice,100);
+  assert.equal(outlier[0].benchmark,100);
+
+  const opt=S.optimizePriceAcrossScenarios('my',[
+    {name:'4家1v3',bidders:[620,740,780]},
+    {name:'6家去极值',bidders:[520,600,640,700,780]},
+  ],c,{minPrice:550,maxPrice:600,step:10});
+  assert.deepEqual(opt.participantCounts,[4,6]);
+  assert.deepEqual(opt.best.details.map(d=>d.trimCount),[0,1]);
+  const proj={...data(),config:{...c,projectName:'复合分段复核'}};
+  assert.deepEqual(W.importProject(W.exportProject(proj)).config,{...c,projectName:'复合分段复核'});
 });

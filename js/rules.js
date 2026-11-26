@@ -39,6 +39,25 @@ const ScoringRules = (() => {
       fields:[num('weightLow','最低价系数',.5,.05,0,1),num('weightAvg','平均价系数',.5,.05,0,1),...deductions()],
       hint:'基准价＝最低价×系数A＋有效报价均值×系数B；两个系数合计1，高低两侧均扣分。',
     },
+    compositeSlopeBenchmark: {
+      name:'复合基准价分段斜率法', defaultFull:100,
+      fields:[
+        num('csTrimThreshold','去极值人数阈值（大于）',5,1),
+        num('csTrimCount','超阈值两端各去（个）',1,1),
+        num('csOutlierPct','均价剔除偏差阈值（±%）',30,1),
+        num('csWeightLow','最低价权重',.5,.05,0,1),
+        num('csWeightAvg','修正均价权重',.5,.05,0,1),
+        num('csFreeLowPct','低价满分宽容带（%）',5,.5),
+        num('csLowMidLimitPct','低价一段上限（%）',10,.5),
+        num('csLowMidDeduct','低价一段每1%扣（公式分）',.2,.1),
+        num('csLowDeepDeduct','低价超限每1%扣（公式分）',.5,.1),
+        num('csHighMidLimitPct','高价一段上限（%）',10,.5),
+        num('csHighMidDeduct','高价一段每1%扣（公式分）',1,.1),
+        num('csHighDeepDeduct','高价超限每1%扣（公式分）',1.2,.1),
+        num('csMinScore','最低得分（公式分）',60,1),
+      ],
+      hint:'有效报价大于阈值（默认5家）先去两端各1个，≤阈值不去极值；入池均价剔除偏离初始均值±30%及以上者；基准价＝入池最低有效评标价×50%＋修正均价×50%。默认[-5%,0%]满分100分，[-10%,-5%)每低1%扣0.2分，<-10%扣0.5分，(0%,+10%]每高1%扣1分，>+10%扣1.2分，最低60分。',
+    },
     fixedBenchmark: {
       name:'固定基准价法',
       fields:[num('benchmark','固定基准价（元）',0,'any'),...deductions()],
@@ -97,6 +116,7 @@ const ScoringRules = (() => {
     infra:{label:'价格权重较高模板',businessWeight:10,priceWeight:60,techWeight:30,priceStrategy:'compositePrice',strategyParams:{weightLow:.5,weightAvg:.5,deductHigh:1,deductLow:.5}},
     tech:{label:'技术权重较高模板',businessWeight:15,priceWeight:30,techWeight:55,priceStrategy:'lowestPrice'},
     lowest:{label:'价格优先模板',businessWeight:20,priceWeight:50,techWeight:30,priceStrategy:'lowestPrice'},
+    compositeSlope:{label:'复合分段模板（5/45/50）',businessWeight:5,priceWeight:45,techWeight:50,priceStrategy:'compositeSlopeBenchmark',strategyParams:{csTrimThreshold:5,csTrimCount:1,csOutlierPct:30,csWeightLow:.5,csWeightAvg:.5,csFreeLowPct:5,csLowMidLimitPct:10,csLowMidDeduct:.2,csLowDeepDeduct:.5,csHighMidLimitPct:10,csHighMidDeduct:1,csHighDeepDeduct:1.2,csMinScore:60}},
   };
   function applyPreset(config,name) {
     if (!Object.hasOwn(presets,name)) throw new Error('预设不存在');

@@ -297,7 +297,11 @@ const WorkspaceUI = (() => {
   }
   function trace(rows,config=state.config) {
     const b=rows.find(b=>b.benchmark>0);if(!b)return '';
-    return `<details class="ws-trace"><summary>基准价 ${fmt(b.benchmark)} · 查看计算过程</summary><p>${esc(Scoring.describeRule(config))}</p>${b.meanEvaluatedPrice!=null?`<p>合格评标价格的算术平均值：${fmt(b.meanEvaluatedPrice)}；基准价显示最多6位小数，计算不提前舍入。</p>`:''}${b.preliminaryAverage!=null?`<p>初始均价：${fmt(b.preliminaryAverage)}；高价阈值：${fmt(b.exclusionThreshold)}；不纳入均价：${(b.excludedHighBidderNames||[]).map(esc).join('、')||'无'}</p>`:''}${b.validBidCount!=null?`<p>有效${b.validBidCount}个；${b.trimCount!=null?'两端各去'+b.trimCount+'个；':''}纳入均价${b.includedBidCount}个。</p>`:''}<p>偏差率 =（报价 − 基准价）÷ 基准价 × 100%；${config.priceStrategy==='piecewiseAverage'?'按相邻K节点线性插值，首末节点外使用固定分，再按选定舍入口径计分。':'按所选规则的高低侧斜率及舍入顺序计分，再应用得分上下限与特殊条件。'}</p></details>`;
+    const isCompositeSlope = config.priceStrategy==='compositeSlopeBenchmark';
+    const detailLine = isCompositeSlope
+      ? `<p>入池最低有效评标价：${fmt(b.lowestUsedPrice)}；入池初始均价：${fmt(b.preliminaryAverage)}；剔除偏离≥±${esc(config.strategyParams?.csOutlierPct??30)}%：${(b.excludedOutlierNames||[]).map(esc).join('、')||'无'}；修正均价：${fmt(b.meanEvaluatedPrice)}。</p>`
+      : `${b.meanEvaluatedPrice!=null?`<p>合格评标价格的算术平均值：${fmt(b.meanEvaluatedPrice)}；基准价显示最多6位小数，计算不提前舍入。</p>`:''}${b.preliminaryAverage!=null?`<p>初始均价：${fmt(b.preliminaryAverage)}；高价阈值：${fmt(b.exclusionThreshold)}；不纳入均价：${(b.excludedHighBidderNames||[]).map(esc).join('、')||'无'}</p>`:''}`;
+    return `<details class="ws-trace"><summary>基准价 ${fmt(b.benchmark)} · 查看计算过程</summary><p>${esc(Scoring.describeRule(config))}</p>${detailLine}${b.validBidCount!=null?`<p>有效${b.validBidCount}个；${b.trimCount!=null?'两端各去'+b.trimCount+'个；':''}${b.excludedOutlierCount!=null?'均值异常剔除'+b.excludedOutlierCount+'个；':''}纳入均价${b.includedBidCount}个。</p>`:''}<p>偏差率 =（报价 − 基准价）÷ 基准价 × 100%；${config.priceStrategy==='piecewiseAverage'?'按相邻K节点线性插值，首末节点外使用固定分，再按选定舍入口径计分。':'按所选规则的高低侧斜率及舍入顺序计分，再应用得分上下限与特殊条件。'}</p></details>`;
   }
   function resultTools(rows) {
     const view=state.resultView||{sort:'rank',query:''};
